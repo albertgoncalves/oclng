@@ -1,0 +1,8 @@
+*
+!.gitignore
+!*.nix
+!.shellhook
+!scripts/
+!*.sh
+!src/
+!*.ml
