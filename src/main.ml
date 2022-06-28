@@ -1,3 +1,23 @@
+type bin_op =
+  | BinOpEq
+  | BinOpAdd
+  | BinOpSub
+
+type intrin =
+  | IntrinPrintf
+
+type expr =
+  | ExprDrop of expr
+  | ExprRet of expr
+  | ExprIntrin of (intrin * expr list)
+  | ExprInt of int
+  | ExprStr of string
+  | ExprVar of string
+  | ExprAssign of (string * expr)
+  | ExprIf of (expr * expr list * expr list)
+  | ExprBinOp of (bin_op * expr * expr)
+  | ExprCall of (string * expr list)
+
 type reg =
   | RegRdi
   | RegRsi
@@ -11,26 +31,6 @@ type reg =
   | RegRax
   | RegRbp
   | RegRsp
-
-type intrin =
-  | IntrinPrintf
-
-type bin_op =
-  | BinOpEq
-  | BinOpAdd
-  | BinOpSub
-
-type expr =
-  | ExprDrop of expr
-  | ExprRet of expr
-  | ExprIntrin of (intrin * expr list)
-  | ExprInt of int
-  | ExprStr of string
-  | ExprVar of string
-  | ExprAssign of (string * expr)
-  | ExprIf of (expr * expr list * expr list)
-  | ExprBinOp of (bin_op * expr * expr)
-  | ExprCall of (string * expr list)
 
 type op =
   | OpReg of reg
@@ -408,8 +408,7 @@ let () : unit =
      \tcall _entry_\n\
      \tmov rdi, rax\n\
      \tmov eax, 60\n\
-     \tsyscall\n\
-    ";
+     \tsyscall\n";
   Queue.to_seq context.insts
   |> List.of_seq
   |> opt_push_pop
