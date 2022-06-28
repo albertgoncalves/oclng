@@ -15,6 +15,11 @@ type reg =
 type intrin =
   | IntrinPrintf
 
+type bin_op =
+  | BinOpEq
+  | BinOpAdd
+  | BinOpSub
+
 type expr =
   | ExprDrop of expr
   | ExprRet of expr
@@ -24,9 +29,7 @@ type expr =
   | ExprVar of string
   | ExprAssign of (string * expr)
   | ExprIf of (expr * expr list * expr list)
-  | ExprEq of (expr * expr)
-  | ExprAdd of (expr * expr)
-  | ExprSub of (expr * expr)
+  | ExprBinOp of (bin_op * expr * expr)
   | ExprCall of (string * expr list)
 
 type op =
@@ -47,6 +50,7 @@ type inst =
   | InstCall of op
   | InstJmp of op
   | InstCmp of (op * op)
+  | InstTest of (op * op)
   | InstJe of op
   | InstEnter
   | InstLeave
@@ -125,6 +129,7 @@ let show_inst : inst -> string =
   | InstCall op -> Printf.sprintf "\tcall %s\n" (show_op op)
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
   | InstCmp (l, r) -> Printf.sprintf "\tcmp %s, %s\n" (show_op l) (show_op r)
+  | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
   | InstJe op -> Printf.sprintf "\tje %s\n" (show_op op)
   | InstEnter ->
     "\tpush rbp\n\
@@ -179,7 +184,18 @@ let rec compile_call_args (regs : reg list) : expr list -> unit =
 
 and compile_if_condition (label_then : string) : expr -> unit =
   function
-  | ExprEq (l, r) ->
+  | ExprBinOp (BinOpEq, expr, ExprInt 0)
+  | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
+    (
+      compile_expr expr;
+      append_inst (InstPop (OpReg RegR10));
+      append_insts
+        [
+          InstTest (OpReg RegR10, OpReg RegR10);
+          InstJe (OpLabel label_then);
+        ]
+    )
+  | ExprBinOp (BinOpEq, l, r) ->
     (
       compile_expr l;
       append_inst (InstPop (OpReg RegR10));
@@ -243,7 +259,7 @@ and compile_expr : expr -> unit =
       compile_expr expr;
       append_local var
     )
-  | ExprAdd (l, r) ->
+  | ExprBinOp (bin_op, l, r) ->
     (
       compile_expr l;
       compile_expr r;
@@ -251,19 +267,10 @@ and compile_expr : expr -> unit =
         [
           InstPop (OpReg RegR11);
           InstPop (OpReg RegR10);
-          InstAdd (OpReg RegR10, OpReg RegR11);
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprSub (l, r) ->
-    (
-      compile_expr l;
-      compile_expr r;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          InstSub (OpReg RegR10, OpReg RegR11);
+          (match bin_op with
+           | BinOpAdd -> InstAdd (OpReg RegR10, OpReg RegR11)
+           | BinOpSub -> InstSub (OpReg RegR10, OpReg RegR11)
+           | _ -> assert false);
           InstPush (OpReg RegR10);
         ]
     )
@@ -293,7 +300,6 @@ and compile_expr : expr -> unit =
         assert false
       )
     )
-  | ExprEq _ -> assert false
 
 let rec compile_func_args (regs : reg list) : string list -> unit =
   function
@@ -373,7 +379,7 @@ let () : unit =
           [
             ExprIf
               (
-                (ExprEq (ExprVar "n", ExprInt 0)),
+                (ExprBinOp (BinOpEq, ExprVar "n", ExprInt 0)),
                 [ExprRet (ExprVar "a")],
                 [
                   ExprRet
@@ -382,9 +388,9 @@ let () : unit =
                         (
                           "fib",
                           [
-                            ExprSub (ExprVar "n", ExprInt 1);
+                            ExprBinOp (BinOpSub, ExprVar "n", ExprInt 1);
                             ExprVar "b";
-                            ExprAdd (ExprVar "a", ExprVar "b");
+                            ExprBinOp (BinOpAdd, ExprVar "a", ExprVar "b");
                           ]
                         )
                     );
