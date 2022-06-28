@@ -180,6 +180,14 @@ let append_insts : inst list -> unit = List.iter append_inst
 let rec returns : expr list -> bool =
   function
   | [] -> assert false
+  | [ExprIfThen (_, exprs_then, exprs_else)] ->
+    if returns exprs_then then (
+      assert (returns exprs_else);
+      true
+    ) else (
+      assert (not (returns exprs_else));
+      false
+    )
   | [ExprRet _] -> true
   | _ :: exprs -> returns exprs
 
