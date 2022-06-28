@@ -214,11 +214,11 @@ and compile_if_condition (label_then : string) : expr -> unit =
   | ExprBinOp (BinOpEq, l, r) ->
     (
       compile_expr l;
-      append_inst (InstPop (OpReg RegR10));
       compile_expr r;
       append_insts
         [
           InstPop (OpReg RegR11);
+          InstPop (OpReg RegR10);
           InstCmp (OpReg RegR10, OpReg RegR11);
           InstJe (OpLabel label_then);
         ]
@@ -252,24 +252,20 @@ and compile_expr : expr -> unit =
         ]
     )
   | ExprStr str ->
-    (
-      let label : string =
-        match Hashtbl.find_opt context.strings str with
-        | None ->
-          (
-            let label : string = string_label (get_k ()) in
-            Hashtbl.add context.strings str label;
-            label
-          )
-        | Some label -> label in
-      append_inst (InstPush (OpLabel label))
-    )
+    let label : string =
+      match Hashtbl.find_opt context.strings str with
+      | None ->
+        (
+          let label : string = string_label (get_k ()) in
+          Hashtbl.add context.strings str label;
+          label
+        )
+      | Some label -> label in
+    append_inst (InstPush (OpLabel label))
   | ExprInt x -> append_inst (InstPush (OpImm x))
   | ExprVar var ->
-    (
-      let offset : int = (Hashtbl.find context.locals var + 1) * 8 in
-      append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, -offset)))
-    )
+    let offset : int = (Hashtbl.find context.locals var + 1) * 8 in
+    append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, -offset)))
   | ExprAssign (var, expr) ->
     (
       compile_expr expr;
@@ -339,7 +335,7 @@ let rec any_assign : expr list -> bool =
   | _ :: exprs -> any_assign exprs
 
 let compile_func (func : func) : unit =
-  context.need_stack <- (List.length func.args <> 0) || any_assign func.body;
+  context.need_stack <- (List.length func.args <> 0) || (any_assign func.body);
   context.n_locals <- 0;
   Hashtbl.clear context.locals;
   append_inst (InstLabel func.label);
