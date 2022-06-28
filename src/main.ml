@@ -14,7 +14,7 @@ type expr =
   | ExprStr of string
   | ExprVar of string
   | ExprAssign of (string * expr)
-  | ExprIf of (expr * expr list * expr list)
+  | ExprIfThen of (expr * expr list * expr list)
   | ExprBinOp of (bin_op * expr * expr)
   | ExprCall of (string * expr list)
 
@@ -54,7 +54,7 @@ type inst =
   | InstJmp of op
   | InstCmp of (op * op)
   | InstTest of (op * op)
-  | InstJe of op
+  | InstJne of op
   | InstEnter
   | InstLeave
   | InstRet
@@ -146,7 +146,7 @@ let show_inst : inst -> string =
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
   | InstCmp (l, r) -> Printf.sprintf "\tcmp %s, %s\n" (show_op l) (show_op r)
   | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
-  | InstJe op -> Printf.sprintf "\tje %s\n" (show_op op)
+  | InstJne op -> Printf.sprintf "\tjne %s\n" (show_op op)
   | InstEnter ->
     "\tpush rbp\n\
      \tmov rbp, rsp\n"
@@ -198,7 +198,7 @@ let rec compile_call_args (regs : reg list) : expr list -> unit =
         )
     )
 
-and compile_if_condition (label_then : string) : expr -> unit =
+and compile_if_condition (label_else : string) : expr -> unit =
   function
   | ExprBinOp (BinOpEq, expr, ExprInt 0)
   | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
@@ -208,7 +208,7 @@ and compile_if_condition (label_then : string) : expr -> unit =
         [
           InstPop (OpReg RegR10);
           InstTest (OpReg RegR10, OpReg RegR10);
-          InstJe (OpLabel label_then);
+          InstJne (OpLabel label_else);
         ]
     )
   | ExprBinOp (BinOpEq, l, r) ->
@@ -220,7 +220,7 @@ and compile_if_condition (label_then : string) : expr -> unit =
           InstPop (OpReg RegR11);
           InstPop (OpReg RegR10);
           InstCmp (OpReg RegR10, OpReg RegR11);
-          InstJe (OpLabel label_then);
+          InstJne (OpLabel label_else);
         ]
     )
   | _ -> assert false
@@ -295,20 +295,17 @@ and compile_expr : expr -> unit =
           InstPush (OpReg RegRax);
         ]
     )
-  | ExprIf (condition, exprs_then, exprs_else) ->
+  | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
-      let then_returns : bool = returns exprs_then in
-      let else_returns : bool = returns exprs_else in
-      let label_then : string = Printf.sprintf "_then%d_" (get_k ()) in
-      if then_returns && else_returns then (
-        compile_if_condition label_then condition;
-        List.iter compile_expr exprs_else;
-        append_inst (InstLabel label_then);
-        List.iter compile_expr exprs_then
-      ) else if then_returns || else_returns then (
-        assert false
+      let returns_then : bool = returns exprs_then in
+      let returns_else : bool = returns exprs_else in
+      let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
+      if returns_then && returns_else then (
+        compile_if_condition label_else condition;
+        List.iter compile_expr exprs_then;
+        append_inst (InstLabel label_else);
+        List.iter compile_expr exprs_else
       ) else (
-        (* let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in *)
         assert false
       )
     )
@@ -389,7 +386,7 @@ let () : unit =
         args = ["n"; "a"; "b"];
         body =
           [
-            ExprIf
+            ExprIfThen
               (
                 (ExprBinOp (BinOpEq, ExprVar "n", ExprInt 0)),
                 [ExprRet (ExprVar "a")],
