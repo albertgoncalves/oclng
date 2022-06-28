@@ -188,9 +188,9 @@ and compile_if_condition (label_then : string) : expr -> unit =
   | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
     (
       compile_expr expr;
-      append_inst (InstPop (OpReg RegR10));
       append_insts
         [
+          InstPop (OpReg RegR10);
           InstTest (OpReg RegR10, OpReg RegR10);
           InstJe (OpLabel label_then);
         ]
