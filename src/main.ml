@@ -32,9 +32,12 @@ type reg =
   | RegRbp
   | RegRsp
 
+type word_size =
+  | WordSizeQWord
+
 type op =
   | OpReg of reg
-  | OpDeref of (reg * int)
+  | OpDeref of (reg * word_size * int)
   | OpImm of int
   | OpLabel of string
 
@@ -105,14 +108,27 @@ let show_reg : reg -> string =
   | RegRbp -> "rbp"
   | RegRsp -> "rsp"
 
+let show_word_size : word_size -> string =
+  function
+  | WordSizeQWord -> "qword"
+
 let show_op : op -> string =
   function
   | OpReg reg -> show_reg reg
-  | OpDeref (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
-  | OpDeref (reg, offset) when offset < 0 ->
-    Printf.sprintf "qword [%s - %d]" (show_reg reg) (-offset)
-  | OpDeref (reg, offset) ->
-    Printf.sprintf "qword [%s + %d]" (show_reg reg) offset
+  | OpDeref (reg, word_size, 0) ->
+    Printf.sprintf "%s [%s]" (show_word_size word_size) (show_reg reg)
+  | OpDeref (reg, word_size, offset) when offset < 0 ->
+    Printf.sprintf
+      "%s [%s - %d]"
+      (show_word_size word_size)
+      (show_reg reg)
+      (-offset)
+  | OpDeref (reg, word_size, offset) ->
+    Printf.sprintf
+      "%s [%s + %d]"
+      (show_word_size word_size)
+      (show_reg reg)
+      offset
   | OpImm x -> string_of_int x
   | OpLabel str -> str
 
@@ -252,7 +268,7 @@ and compile_expr : expr -> unit =
   | ExprVar var ->
     (
       let offset : int = (Hashtbl.find context.locals var + 1) * 8 in
-      append_inst (InstPush (OpDeref (RegRbp, -offset)))
+      append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, -offset)))
     )
   | ExprAssign (var, expr) ->
     (
