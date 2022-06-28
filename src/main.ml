@@ -331,6 +331,18 @@ let rec any_assign : expr list -> bool =
   | (ExprAssign _) :: _ -> true
   | _ :: exprs -> any_assign exprs
 
+let rec prepare : expr list -> expr list =
+  function
+  | ExprRet _ :: _
+  | ExprDrop _ :: _
+  | [ExprAssign _] -> assert false
+  | [] -> []
+  | [ExprIfThen (condition, exprs_then, exprs_else)] ->
+    [ExprIfThen (condition, prepare exprs_then, prepare exprs_else)]
+  | [expr] -> [ExprRet expr]
+  | (ExprAssign _ as expr) :: exprs -> expr :: prepare exprs
+  | expr :: exprs -> ExprDrop expr :: prepare exprs
+
 let compile_func (func : func) : unit =
   context.need_stack <- (List.length func.args <> 0) || (any_assign func.body);
   context.n_locals <- 0;
@@ -340,7 +352,8 @@ let compile_func (func : func) : unit =
     append_inst InstEnter
   );
   compile_func_args arg_regs func.args;
-  List.iter compile_expr func.body
+  assert ((List.length func.body) <> 0);
+  List.iter compile_expr (prepare func.body)
 
 let rec opt_push_pop : inst list -> inst list =
   function
@@ -367,18 +380,15 @@ let () : unit =
         args = [];
         body =
           [
-            ExprDrop
+            ExprIntrin
               (
-                ExprIntrin
-                  (
-                    IntrinPrintf,
-                    [
-                      ExprStr "%ld\n";
-                      ExprCall ("fib", [ExprInt 50; ExprInt 0; ExprInt 1]);
-                    ]
-                  )
+                IntrinPrintf,
+                [
+                  ExprStr "%ld\n";
+                  ExprCall ("fib", [ExprInt 50; ExprInt 0; ExprInt 1]);
+                ]
               );
-            ExprRet (ExprInt 0);
+            ExprInt 0;
           ];
       };
       {
@@ -389,20 +399,17 @@ let () : unit =
             ExprIfThen
               (
                 (ExprBinOp (BinOpEq, ExprVar "n", ExprInt 0)),
-                [ExprRet (ExprVar "a")],
+                [ExprVar "a"],
                 [
-                  ExprRet
+                  ExprCall
                     (
-                      ExprCall
-                        (
-                          "fib",
-                          [
-                            ExprBinOp (BinOpSub, ExprVar "n", ExprInt 1);
-                            ExprVar "b";
-                            ExprBinOp (BinOpAdd, ExprVar "a", ExprVar "b");
-                          ]
-                        )
-                    );
+                      "fib",
+                      [
+                        ExprBinOp (BinOpSub, ExprVar "n", ExprInt 1);
+                        ExprVar "b";
+                        ExprBinOp (BinOpAdd, ExprVar "a", ExprVar "b");
+                      ]
+                    )
                 ]
               );
           ];
