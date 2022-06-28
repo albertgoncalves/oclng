@@ -2,6 +2,8 @@ type context =
   {
     mutable k : int;
     strings : (string, string) Hashtbl.t;
+    mutable n_locals : int;
+    locals : (string, int) Hashtbl.t;
   }
 
 type reg =
@@ -19,7 +21,12 @@ type expr =
   | ExprDrop of expr
   | ExprRet of expr
   | ExprIntrin of (intrin * expr list)
+  | ExprInt of int
   | ExprStr of string
+  | ExprVar of string
+  | ExprAssign of (string * expr)
+  | ExprSub of (expr * expr)
+  | ExprCall of (string * expr list)
 
 type func =
   {
@@ -32,6 +39,8 @@ let context : context =
   {
     k = 0;
     strings = Hashtbl.create 64;
+    n_locals = 0;
+    locals = Hashtbl.create 8;
   }
 
 let buffer : Buffer.t = Buffer.create 1024
@@ -65,7 +74,11 @@ let compile_string (str : string) (label : string) : unit =
 
 let string_label : int -> string = Printf.sprintf "_s%d_"
 
-let rec compile_args (regs : reg list) : expr list -> unit =
+let append_local (var : string) : unit =
+  Hashtbl.add context.locals var context.n_locals;
+  context.n_locals <- context.n_locals + 1
+
+let rec compile_call_args (regs : reg list) : expr list -> unit =
   function
   | [] -> ()
   | (expr :: exprs) ->
@@ -75,7 +88,7 @@ let rec compile_args (regs : reg list) : expr list -> unit =
       | (reg :: regs) ->
         (
           compile_expr expr;
-          compile_args regs exprs;
+          compile_call_args regs exprs;
           append_buffer (Printf.sprintf "\tpop %s\n" (show_reg reg))
         )
     )
@@ -90,11 +103,15 @@ and compile_expr : expr -> unit =
   | ExprRet expr ->
     (
       compile_expr expr;
-      append_buffer "\tret\n"
+      append_buffer
+        "\tpop rax\n\
+         \tmov rsp, rbp\n\
+         \tpop rbp\n\
+         \tret\n";
     )
   | ExprIntrin (IntrinPrintf, args) ->
     (
-      compile_args arg_regs args;
+      compile_call_args arg_regs args;
       append_buffer
         "\txor eax, eax\n\
          \tcall printf\n\
@@ -115,9 +132,59 @@ and compile_expr : expr -> unit =
       |> Printf.sprintf "\tpush %s\n"
       |> append_buffer
     )
+  | ExprInt x -> append_buffer (Printf.sprintf "\tpush %d\n" x)
+  | ExprVar var ->
+    (
+      (Hashtbl.find context.locals var + 1) * 8
+      |> Printf.sprintf "\tpush qword [rbp - %d]\n"
+      |> append_buffer
+    )
+  | ExprAssign (var, expr) ->
+    (
+      compile_expr expr;
+      append_local var
+    )
+  | ExprSub (l, r) ->
+    (
+      compile_expr l;
+      compile_expr r;
+      append_buffer
+        "\tpop r11\n\
+         \tpop r10\n\
+         \tsub r10, r11\n\
+         \tpush r10\n"
+    )
+  | ExprCall (label, args) ->
+    (
+      compile_call_args arg_regs args;
+      append_buffer
+        (Printf.sprintf
+           "\tcall %s\n\
+            \tpush rax\n" label)
+    )
 
+let rec compile_func_args (regs : reg list) : string list -> unit =
+  function
+  | [] -> ()
+  | (str :: strs) ->
+    (
+      match regs with
+      | [] -> assert false
+      | (reg :: regs) ->
+        (
+          append_local str;
+          append_buffer (Printf.sprintf "\tpush %s\n" (show_reg reg));
+          compile_func_args regs strs
+        )
+    )
 let compile_func (func : func) : unit =
-  append_buffer (Printf.sprintf "%s:\n" func.label);
+  context.n_locals <- 0;
+  Hashtbl.clear context.locals;
+  append_buffer
+    (Printf.sprintf "%s:\n\
+                     \tpush rbp\n\
+                     \tmov rbp, rsp\n" func.label);
+  compile_func_args arg_regs func.args;
   List.iter compile_expr func.body
 
 let () : unit =
@@ -128,7 +195,7 @@ let () : unit =
      section '.text' executable\n\
      _start:\n\
      \tcall _entry_\n\
-     \txor edi, edi\n\
+     \tmov rdi, rax\n\
      \tmov eax, 60\n\
      \tsyscall\n\
     ";
@@ -139,14 +206,38 @@ let () : unit =
         args = [];
         body =
           [
-            ExprRet (ExprDrop (ExprIntrin (
-                IntrinPrintf,
-                [
-                  ExprStr "%s\n";
-                  ExprStr "Hello, world!";
-                ]
-              )))
+            ExprAssign ("x", ExprStr "Hello, world!");
+            ExprAssign
+              (
+                "y",
+                ExprCall
+                  (
+                    "f",
+                    [
+                      ExprCall ("f", [ExprInt (-1234); ExprInt 0]);
+                      ExprVar "x";
+                    ]
+                  )
+              );
+            ExprDrop
+              (
+                ExprIntrin
+                  (
+                    IntrinPrintf,
+                    [
+                      ExprStr "%s %ld\n";
+                      ExprVar "x";
+                      ExprVar "y";
+                    ]
+                  )
+              );
+            ExprRet (ExprInt 0);
           ];
+      };
+      {
+        label = "f";
+        args = ["x"; "y"];
+        body = [ExprRet (ExprSub (ExprVar "x", ExprInt 1))];
       };
     ];
   append_buffer "section '.rodata'\n";
