@@ -5,18 +5,23 @@ type bin_op =
 
 type intrin =
   | IntrinPrintf
+  | IntrinPack
+
+type call =
+  | CallIntrin of intrin
+  | CallLabel of string
 
 type expr =
   | ExprDrop of expr
   | ExprRet of expr
-  | ExprIntrin of (intrin * expr list)
   | ExprInt of int
   | ExprStr of string
   | ExprVar of string
   | ExprAssign of (string * expr)
   | ExprIfThen of (expr * expr list * expr list)
   | ExprBinOp of (bin_op * expr * expr)
-  | ExprCall of (string * expr list)
+  | ExprCall of (call * expr list)
+  | ExprUnpack of (expr * ((string list) * (expr list)) list)
 
 type reg =
   | RegRdi
@@ -38,6 +43,7 @@ type word_size =
 type op =
   | OpReg of reg
   | OpDeref of (reg * word_size * int)
+  | OpTable of (string * reg * int)
   | OpImm of int
   | OpLabel of string
 
@@ -74,6 +80,7 @@ type context =
     mutable n_locals : int;
     locals : (string, int) Hashtbl.t;
     insts : inst Queue.t;
+    tables : (string * (string list)) Queue.t;
   }
 
 let context : context =
@@ -84,6 +91,7 @@ let context : context =
     n_locals = 0;
     locals = Hashtbl.create 8;
     insts = Queue.create ();
+    tables = Queue.create ();
   }
 
 let arg_regs : reg list = [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
@@ -129,6 +137,8 @@ let show_op : op -> string =
       (show_word_size word_size)
       (show_reg reg)
       offset
+  | OpTable (label, reg, scale) ->
+    Printf.sprintf "[%s + (%s * %d)]" label (show_reg reg) scale
   | OpImm x -> string_of_int x
   | OpLabel str -> str
 
@@ -166,11 +176,19 @@ let compile_string (str : string) (label : string) : unit =
   |> Printf.sprintf "\t%s db %s,0\n" label
   |> append_buffer
 
+let compile_table ((table, branches) : (string * string list)) : unit =
+  append_buffer
+    (Printf.sprintf "\t%s dq %s\n" table (String.concat "," branches))
+
 let string_label : int -> string = Printf.sprintf "_s%d_"
 
 let append_local (var : string) : unit =
   Hashtbl.add context.locals var context.n_locals;
   context.n_locals <- context.n_locals + 1
+
+let remove_local (var : string) : unit =
+  Hashtbl.remove context.locals var;
+  context.n_locals <- context.n_locals - 1
 
 let append_inst (inst : inst) : unit =
   Queue.add inst context.insts
@@ -190,6 +208,16 @@ let rec returns : expr list -> bool =
     )
   | [ExprRet _] -> true
   | _ :: exprs -> returns exprs
+
+let rec compile_pack_args (offset : int) : string list -> unit =
+  function
+  | [] -> ()
+  | str :: strs ->
+    (
+      append_local str;
+      append_inst (InstPush (OpDeref (RegR11, WordSizeQWord, 8 * offset)));
+      compile_pack_args (offset + 1) strs
+    )
 
 let rec compile_call_args (regs : reg list) : expr list -> unit =
   function
@@ -249,15 +277,24 @@ and compile_expr : expr -> unit =
       );
       append_inst InstRet
     )
-  | ExprIntrin (IntrinPrintf, args) ->
+  | ExprCall (call, args) ->
     (
       compile_call_args arg_regs args;
-      append_insts
-        [
-          InstXor (OpReg RegEax, OpReg RegEax);
-          InstCall (OpLabel "printf");
-          InstPush (OpReg RegRax);
-        ]
+      (match call with
+       | CallIntrin IntrinPrintf ->
+         append_insts
+           [
+             InstXor (OpReg RegEax, OpReg RegEax);
+             InstCall (OpLabel "printf");
+           ]
+       | CallIntrin IntrinPack ->
+         (match List.length args with
+          | 1 -> append_inst (InstCall (OpLabel "pack_1"))
+          | 2 -> append_inst (InstCall (OpLabel "pack_2"))
+          | 3 -> append_inst (InstCall (OpLabel "pack_3"))
+          | _ -> assert false);
+       | CallLabel label -> append_inst (InstCall (OpLabel label)));
+      append_inst (InstPush (OpReg RegRax))
     )
   | ExprStr str ->
     let label : string =
@@ -294,15 +331,6 @@ and compile_expr : expr -> unit =
           InstPush (OpReg RegR10);
         ]
     )
-  | ExprCall (label, args) ->
-    (
-      compile_call_args arg_regs args;
-      append_insts
-        [
-          InstCall (OpLabel label);
-          InstPush (OpReg RegRax);
-        ]
-    )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
       let returns_then : bool = returns exprs_then in
@@ -317,6 +345,46 @@ and compile_expr : expr -> unit =
         assert false
       )
     )
+  | ExprUnpack (expr, branches) ->
+    (
+      let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
+      let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
+      compile_expr expr;
+      append_insts
+        [
+          InstPop (OpReg RegR11);
+          InstMov (OpReg RegR10, OpDeref (RegR11, WordSizeQWord, 0));
+          InstJmp (OpTable (label_table, RegR10, 8));
+        ];
+      let label_branches : string list =
+        List.map (compile_branch label_end) branches in
+      append_insts
+        [
+          InstLabel label_end;
+          InstPush (OpReg RegRax);
+        ];
+      Queue.add (label_table, label_branches) context.tables
+    )
+
+and compile_branch
+    (label_end : string)
+    ((args, exprs) : (string list * expr list)) : string =
+  let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
+  append_insts
+    [
+      InstLabel label_branch;
+      InstEnter;
+    ];
+  compile_pack_args 1 args;
+  List.iter compile_expr exprs;
+  List.iter remove_local args;
+  append_insts
+    [
+      InstPop (OpReg RegRax);
+      InstLeave;
+      InstJmp (OpLabel label_end);
+    ];
+  label_branch
 
 let rec compile_func_args (regs : reg list) : string list -> unit =
   function
@@ -388,12 +456,37 @@ let () : unit =
         args = [];
         body =
           [
-            ExprIntrin
+            ExprCall
               (
-                IntrinPrintf,
+                CallIntrin IntrinPrintf,
                 [
                   ExprStr "%ld\n";
-                  ExprCall ("fib", [ExprInt 50; ExprInt 0; ExprInt 1]);
+                  ExprCall
+                    (CallLabel "fib", [ExprInt 50; ExprInt 0; ExprInt 1]);
+                ]
+              );
+            ExprUnpack
+              (
+                ExprCall
+                  (
+                    CallIntrin IntrinPack,
+                    [ExprInt 1; ExprStr "%s\n"; ExprStr "Here!"]
+                  ),
+                [
+                  (
+                    [],
+                    [ExprCall (CallIntrin IntrinPrintf, [ExprStr "!\n"])]
+                  );
+                  (
+                    ["a"; "b"],
+                    [
+                      ExprCall
+                        (
+                          CallIntrin IntrinPrintf,
+                          [ExprVar "a"; ExprVar "b"]
+                        )
+                    ]
+                  );
                 ]
               );
             ExprInt 0;
@@ -411,7 +504,7 @@ let () : unit =
                 [
                   ExprCall
                     (
-                      "fib",
+                      CallLabel "fib",
                       [
                         ExprBinOp (BinOpSub, ExprVar "n", ExprInt 1);
                         ExprVar "b";
@@ -437,4 +530,5 @@ let () : unit =
   |> List.iter (fun inst -> append_buffer (show_inst inst));
   append_buffer "section '.rodata'\n";
   Hashtbl.iter compile_string context.strings;
+  Queue.iter compile_table context.tables;
   Buffer.output_buffer (open_out Sys.argv.(1)) buffer
