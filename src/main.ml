@@ -425,14 +425,11 @@ let () : unit =
     ];
   append_buffer
     "format ELF64\n\
-     public _start\n\
+     public _entry_\n\
      extrn printf\n\
-     section '.text' executable\n\
-     _start:\n\
-     \tcall _entry_\n\
-     \tmov rdi, rax\n\
-     \tmov eax, 60\n\
-     \tsyscall\n";
+     extrn pack_1\n\
+     extrn pack_2\n\
+     extrn pack_3\n";
   Queue.to_seq context.insts
   |> List.of_seq
   |> opt_push_pop
