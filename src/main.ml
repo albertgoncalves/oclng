@@ -183,6 +183,7 @@ let compile_table ((table, branches) : (string * string list)) : unit =
 let string_label : int -> string = Printf.sprintf "_s%d_"
 
 let append_local (var : string) : unit =
+  assert (not (Hashtbl.mem context.locals var));
   Hashtbl.add context.locals var context.n_locals;
   context.n_locals <- context.n_locals + 1
 
@@ -486,13 +487,18 @@ let () : unit =
                     (CallLabel "fib", [ExprInt 50; ExprInt 0; ExprInt 1]);
                 ]
               );
-            ExprUnpack
+            ExprAssign
               (
+                "x",
                 ExprCall
                   (
                     CallIntrin IntrinPack,
                     [ExprInt 1; ExprStr "%s\n"; ExprStr "Here!"]
-                  ),
+                  )
+              );
+            ExprUnpack
+              (
+                ExprVar "x",
                 [
                   (
                     [],
