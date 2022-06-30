@@ -558,4 +558,6 @@ let () : unit =
   append_buffer "section '.rodata'\n";
   Hashtbl.iter compile_string context.strings;
   Queue.iter compile_table context.tables;
-  Buffer.output_buffer (open_out Sys.argv.(1)) buffer
+  let file : out_channel = open_out Sys.argv.(2) in
+  Buffer.output_buffer file buffer;
+  close_out file
