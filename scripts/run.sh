@@ -36,8 +36,9 @@ flags_c=(
 (
     cd "$WD/build/"
     (
-        ocamlc "${flags_ocaml[@]}" "main.ml" -o "$WD/bin/com"
-        "$WD/bin/com" "$WD/build/main.asm"
+        ocamlc "${flags_ocaml[@]}" "types.ml" "compile.ml" "main.ml" \
+            -o "$WD/bin/com"
+        "$WD/bin/com" "$WD/ex/fib.oc" "$WD/build/main.asm"
         fasm "$WD/build/main.asm" "$WD/build/main.o"
     ) &
     clang "${flags_c[@]}" -o "$WD/build/runtime_c.o" "$WD/src/runtime.c" &
