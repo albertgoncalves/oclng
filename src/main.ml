@@ -50,7 +50,7 @@ type op =
 type inst =
   | InstPush of op
   | InstPop of op
-  | InstDrop
+  | InstDrop of int
   | InstMov of (op * op)
   | InstAdd of (op * op)
   | InstSub of (op * op)
@@ -78,7 +78,7 @@ type context =
     strings : (string, string) Hashtbl.t;
     mutable need_stack : bool;
     mutable n_locals : int;
-    locals : (string, int) Hashtbl.t;
+    mutable locals : (string, int) Hashtbl.t;
     insts : inst Queue.t;
     tables : (string * (string list)) Queue.t;
   }
@@ -146,7 +146,7 @@ let show_inst : inst -> string =
   function
   | InstPush op -> Printf.sprintf "\tpush %s\n" (show_op op)
   | InstPop op -> Printf.sprintf "\tpop %s\n" (show_op op)
-  | InstDrop -> "\tadd rsp, 8\n"
+  | InstDrop n -> Printf.sprintf "\tadd rsp, %d\n" n
   | InstMov (l, r) -> Printf.sprintf "\tmov %s, %s\n" (show_op l) (show_op r)
   | InstAdd (l, r) -> Printf.sprintf "\tadd %s, %s\n" (show_op l) (show_op r)
   | InstSub (l, r) -> Printf.sprintf "\tsub %s, %s\n" (show_op l) (show_op r)
@@ -186,14 +186,15 @@ let append_local (var : string) : unit =
   Hashtbl.add context.locals var context.n_locals;
   context.n_locals <- context.n_locals + 1
 
-let remove_local (var : string) : unit =
-  Hashtbl.remove context.locals var;
-  context.n_locals <- context.n_locals - 1
-
 let append_inst (inst : inst) : unit =
   Queue.add inst context.insts
 
 let append_insts : inst list -> unit = List.iter append_inst
+
+let is_assign : expr -> bool =
+  function
+  | ExprAssign _-> true
+  | _ -> false
 
 let rec returns : expr list -> bool =
   function
@@ -266,7 +267,7 @@ and compile_expr : expr -> unit =
   | ExprDrop expr ->
     (
       compile_expr expr;
-      append_inst InstDrop
+      append_inst (InstDrop 8)
     )
   | ExprRet expr ->
     (
@@ -333,31 +334,47 @@ and compile_expr : expr -> unit =
     )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
+      assert (not (is_assign condition));
       let returns_then : bool = returns exprs_then in
       let returns_else : bool = returns exprs_else in
       let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
+      let n_locals : int = context.n_locals in
+      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
       if returns_then && returns_else then (
         compile_if_condition label_else condition;
         List.iter compile_expr exprs_then;
+        if context.n_locals <> n_locals then (
+          assert (n_locals < context.n_locals);
+          context.n_locals <- n_locals;
+          context.locals <- locals
+        );
         append_inst (InstLabel label_else);
-        List.iter compile_expr exprs_else
+        List.iter compile_expr exprs_else;
+        if context.n_locals <> n_locals then (
+          assert (n_locals < context.n_locals);
+          context.n_locals <- n_locals;
+          context.locals <- locals
+        )
       ) else (
         assert false
       )
     )
-  | ExprUnpack (expr, branches) ->
+  | ExprUnpack (packed_expr, branches) ->
     (
+      assert (not (is_assign packed_expr));
       let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
       let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
-      compile_expr expr;
+      compile_expr packed_expr;
       append_insts
         [
           InstPop (OpReg RegR11);
           InstMov (OpReg RegR10, OpDeref (RegR11, WordSizeQWord, 0));
           InstJmp (OpTable (label_table, RegR10, 8));
         ];
+      let n_locals : int = context.n_locals in
+      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
       let label_branches : string list =
-        List.map (compile_branch label_end) branches in
+        List.map (compile_branch n_locals locals label_end) branches in
       append_insts
         [
           InstLabel label_end;
@@ -367,24 +384,34 @@ and compile_expr : expr -> unit =
     )
 
 and compile_branch
+    (n_locals : int)
+    (locals : (string, int) Hashtbl.t)
     (label_end : string)
     ((args, exprs) : (string list * expr list)) : string =
   let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
-  append_insts
-    [
-      InstLabel label_branch;
-      InstEnter;
-    ];
+  append_inst (InstLabel label_branch);
   compile_pack_args 1 args;
   List.iter compile_expr exprs;
-  List.iter remove_local args;
-  append_insts
-    [
-      InstPop (OpReg RegRax);
-      InstLeave;
-      InstJmp (OpLabel label_end);
-    ];
+  append_inst (InstPop (OpReg RegRax));
+  let new_n_locals : int = context.n_locals in
+  if new_n_locals <> n_locals then (
+    assert (n_locals < new_n_locals);
+    append_inst (InstDrop (8 * (new_n_locals - n_locals)))
+  );
+  append_inst (InstJmp (OpLabel label_end));
+  context.n_locals <- n_locals;
+  context.locals <- locals;
   label_branch
+
+let rec need_stack : expr list -> bool =
+  function
+  | [] -> false
+  | (ExprAssign _) :: _ -> true
+  | (ExprUnpack _) :: _ -> true
+  | (ExprIfThen (ExprAssign _, _, _)) :: _ -> assert false
+  | (ExprIfThen (_, exprs_then, exprs_else)) :: exprs ->
+    (need_stack exprs_then) || (need_stack exprs_else) || (need_stack exprs)
+  | _ :: exprs -> need_stack exprs
 
 let rec compile_func_args (regs : reg list) : string list -> unit =
   function
@@ -401,12 +428,6 @@ let rec compile_func_args (regs : reg list) : string list -> unit =
         )
     )
 
-let rec any_assign : expr list -> bool =
-  function
-  | [] -> false
-  | (ExprAssign _) :: _ -> true
-  | _ :: exprs -> any_assign exprs
-
 let rec prepare : expr list -> expr list =
   function
   | ExprRet _ :: _
@@ -420,7 +441,7 @@ let rec prepare : expr list -> expr list =
   | expr :: exprs -> ExprDrop expr :: prepare exprs
 
 let compile_func (func : func) : unit =
-  context.need_stack <- (List.length func.args <> 0) || (any_assign func.body);
+  context.need_stack <- (List.length func.args <> 0) || (need_stack func.body);
   context.n_locals <- 0;
   Hashtbl.clear context.locals;
   append_inst (InstLabel func.label);
