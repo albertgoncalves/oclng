@@ -220,49 +220,7 @@ let rec compile_pack_args (offset : int) : string list -> unit =
       compile_pack_args (offset + 1) strs
     )
 
-let rec compile_call_args (regs : reg list) : expr list -> unit =
-  function
-  | [] -> ()
-  | expr :: exprs ->
-    (
-      match regs with
-      | [] -> assert false
-      | reg :: regs ->
-        (
-          compile_expr expr;
-          compile_call_args regs exprs;
-          append_inst (InstPop (OpReg reg))
-        )
-    )
-
-and compile_if_condition (label_else : string) : expr -> unit =
-  function
-  | ExprBinOp (BinOpEq, expr, ExprInt 0)
-  | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
-    (
-      compile_expr expr;
-      append_insts
-        [
-          InstPop (OpReg RegR10);
-          InstTest (OpReg RegR10, OpReg RegR10);
-          InstJne (OpLabel label_else);
-        ]
-    )
-  | ExprBinOp (BinOpEq, l, r) ->
-    (
-      compile_expr l;
-      compile_expr r;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          InstCmp (OpReg RegR10, OpReg RegR11);
-          InstJne (OpLabel label_else);
-        ]
-    )
-  | _ -> assert false
-
-and compile_expr : expr -> unit =
+let rec compile_expr : expr -> unit =
   function
   | ExprDrop expr ->
     (
@@ -382,6 +340,48 @@ and compile_expr : expr -> unit =
         ];
       Queue.add (label_table, label_branches) context.tables
     )
+
+and compile_call_args (regs : reg list) : expr list -> unit =
+  function
+  | [] -> ()
+  | expr :: exprs ->
+    (
+      match regs with
+      | [] -> assert false
+      | reg :: regs ->
+        (
+          compile_expr expr;
+          compile_call_args regs exprs;
+          append_inst (InstPop (OpReg reg))
+        )
+    )
+
+and compile_if_condition (label_else : string) : expr -> unit =
+  function
+  | ExprBinOp (BinOpEq, expr, ExprInt 0)
+  | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
+    (
+      compile_expr expr;
+      append_insts
+        [
+          InstPop (OpReg RegR10);
+          InstTest (OpReg RegR10, OpReg RegR10);
+          InstJne (OpLabel label_else);
+        ]
+    )
+  | ExprBinOp (BinOpEq, l, r) ->
+    (
+      compile_expr l;
+      compile_expr r;
+      append_insts
+        [
+          InstPop (OpReg RegR11);
+          InstPop (OpReg RegR10);
+          InstCmp (OpReg RegR10, OpReg RegR11);
+          InstJne (OpLabel label_else);
+        ]
+    )
+  | _ -> assert false
 
 and compile_branch
     (n_locals : int)
