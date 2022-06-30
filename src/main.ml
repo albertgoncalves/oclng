@@ -310,8 +310,8 @@ and compile_expr : expr -> unit =
     append_inst (InstPush (OpLabel label))
   | ExprInt x -> append_inst (InstPush (OpImm x))
   | ExprVar var ->
-    let offset : int = (Hashtbl.find context.locals var + 1) * 8 in
-    append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, -offset)))
+    let offset : int = -((Hashtbl.find context.locals var + 1) * 8) in
+    append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, offset)))
   | ExprAssign (var, expr) ->
     (
       compile_expr expr;
