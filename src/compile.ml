@@ -294,10 +294,8 @@ let rec compile_expr : expr -> unit =
           InstMov (OpReg RegR10, OpDeref (RegR11, WordSizeQWord, 0));
           InstJmp (OpTable (label_table, RegR10, 8));
         ];
-      let n_locals : int = context.n_locals in
-      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
       let label_branches : string list =
-        List.map (compile_branch n_locals locals label_end) branches in
+        List.map (compile_branch label_end) branches in
       append_insts
         [
           InstLabel label_end;
@@ -349,23 +347,23 @@ and compile_if_condition (label_else : string) : expr -> unit =
   | _ -> assert false
 
 and compile_branch
-    (n_locals : int)
-    (locals : (string, int) Hashtbl.t)
     (label_end : string)
     ((args, exprs) : branch) : string =
   let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
+  let n_locals : int = context.n_locals in
+  let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
   compile_pack_args 1 args;
   List.iter compile_expr exprs;
   append_inst (InstPop (OpReg RegRax));
   let new_n_locals : int = context.n_locals in
   if new_n_locals <> n_locals then (
     assert (n_locals < new_n_locals);
-    append_inst (InstDrop (8 * (new_n_locals - n_locals)))
+    append_inst (InstDrop (8 * (new_n_locals - n_locals)));
+    context.n_locals <- n_locals;
+    context.locals <- locals
   );
   append_inst (InstJmp (OpLabel label_end));
-  context.n_locals <- n_locals;
-  context.locals <- locals;
   label_branch
 
 let rec need_stack : expr list -> bool =
