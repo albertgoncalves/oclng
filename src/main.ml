@@ -8,7 +8,12 @@ let () : unit =
   let source : bytes = Bytes.create n in
   really_input file source 0 n;
   close_in file;
-  let buffer : Buffer.t = compile (parse (tokenize source)) in
+  let buffer : Buffer.t =
+    tokenize source
+    |> parse
+    |> Queue.to_seq
+    |> List.of_seq
+    |> compile in
   let file : out_channel = open_out Sys.argv.(2) in
   Buffer.output_buffer file buffer;
   close_out file

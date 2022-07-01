@@ -282,12 +282,12 @@ let rec compile_expr : expr -> unit =
         assert false
       )
     )
-  | ExprUnpack (packed_expr, branches) ->
+  | ExprUnpack (packed, branches) ->
     (
-      assert (not (is_assign packed_expr));
+      assert (not (is_assign packed));
       let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
       let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
-      compile_expr packed_expr;
+      compile_expr packed;
       append_insts
         [
           InstPop (OpReg RegR11);
@@ -352,7 +352,7 @@ and compile_branch
     (n_locals : int)
     (locals : (string, int) Hashtbl.t)
     (label_end : string)
-    ((args, exprs) : (string list * expr list)) : string =
+    ((args, exprs) : branch) : string =
   let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
   compile_pack_args 1 args;
