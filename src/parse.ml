@@ -99,6 +99,11 @@ let tokenize (source : bytes) : token Queue.t =
         Buffer.add_char buffer '"';
         loop_string buffer (i + 1)
       )
+    | '\\' ->
+      (
+        Buffer.add_char buffer '\\';
+        loop_string buffer (i + 1)
+      )
     | _ -> assert false in
   let rec loop_token (l : int) (r : int) : unit =
     if l = n then
