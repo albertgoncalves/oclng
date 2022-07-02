@@ -216,6 +216,9 @@ let rec compile_expr : expr -> unit =
           | 1 -> append_inst (InstCall (OpLabel "pack_1"))
           | 2 -> append_inst (InstCall (OpLabel "pack_2"))
           | 3 -> append_inst (InstCall (OpLabel "pack_3"))
+          | 4 -> append_inst (InstCall (OpLabel "pack_4"))
+          | 5 -> append_inst (InstCall (OpLabel "pack_5"))
+          | 6 -> append_inst (InstCall (OpLabel "pack_6"))
           | _ -> assert false);
        | CallLabel label -> append_inst (InstCall (OpLabel label)));
       append_inst (InstPush (OpReg RegRax))
@@ -439,9 +442,13 @@ let compile (funcs : func list) : Buffer.t =
     "format ELF64\n\
      public _entry_\n\
      extrn printf\n\
+     extrn fflush\n\
      extrn pack_1\n\
      extrn pack_2\n\
-     extrn pack_3\n";
+     extrn pack_3\n\
+     extrn pack_4\n\
+     extrn pack_5\n\
+     extrn pack_6\n";
   Queue.to_seq context.insts
   |> List.of_seq
   |> opt_push_pop

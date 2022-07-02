@@ -22,6 +22,7 @@ syn keyword Statement
     \ let
     \ unpack
 syn keyword Keyword
+    \ fflush
     \ printf
     \ pack
 

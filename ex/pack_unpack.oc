@@ -1,11 +1,14 @@
 f x {
     unpack x {
         {
-            let y (+ 1 2)
-            (printf "first %d\n" y)
+            let y (+ 123000 456)
+            (printf "first %ld\n" y)
         }
         y {
-            (printf "second %s\n" y)
+            (printf "%s\n" y)
+        }
+        a b c {
+            (printf "%ld %ld %ld\n" a b c)
         }
     }
     let y (- 1 1)
@@ -14,6 +17,7 @@ f x {
 
 _entry_ {
     (f (pack 0))
-    (f (pack 1 "path"))
-    0
+    (f (pack 1 "second path!"))
+    (f (pack 2 1 2 3))
+    (fflush 0)
 }
