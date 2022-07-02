@@ -1,10 +1,3 @@
-_entry_ {
-    (printf "%ld\n" (fib 50 0 1))
-    (f (pack 0))
-    (f (pack 1 "path"))
-    0
-}
-
 f x {
     unpack x {
         {
@@ -19,10 +12,8 @@ f x {
     y
 }
 
-fib n a b {
-    if (= n 0) {
-        a
-    } else {
-        (fib (- n 1) b (+ a b))
-    }
+_entry_ {
+    (f (pack 0))
+    (f (pack 1 "path"))
+    0
 }

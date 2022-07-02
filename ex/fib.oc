@@ -1,0 +1,12 @@
+_entry_ {
+    (printf "%ld\n" (fib 50 0 1))
+    0
+}
+
+fib n a b {
+    if (= n 0) {
+        a
+    } else {
+        (fib (- n 1) b (+ a b))
+    }
+}
