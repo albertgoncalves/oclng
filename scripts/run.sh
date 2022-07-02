@@ -32,21 +32,22 @@ flags_c=(
     done
     cp "$WD/src/"*.ml "$WD/build/"
 )
-
 (
-    cd "$WD/build/"
     (
+        cd "$WD/build/"
         ocamlc "${flags_ocaml[@]}" "types.ml" "parse.ml" "compile.ml" \
             "main.ml" -o "$WD/bin/com"
-        "$WD/bin/com" "$WD/ex/fib.oc" "$WD/build/main.asm"
-        fasm "$WD/build/main.asm" "$WD/build/main.o"
     ) &
     clang "${flags_c[@]}" -o "$WD/build/runtime_c.o" "$WD/src/runtime.c" &
-    fasm -d "MEMORY_CAP=${memory_cap}" "$WD/src/runtime.asm" \
-        "$WD/build/runtime_asm.o" &
     for _ in $(jobs -p); do
         wait -n
     done
+)
+(
+    "$WD/bin/com" "$WD/ex/fib.oc" "$WD/build/main.asm"
+    fasm "$WD/build/main.asm" "$WD/build/main.o"
+    fasm -d "MEMORY_CAP=${memory_cap}" "$WD/src/runtime.asm" \
+        "$WD/build/runtime_asm.o"
     ld -fuse-ld=mold -o "$WD/bin/run" -lc "$WD/build/runtime_asm.o" \
         "$WD/build/runtime_c.o" "$WD/build/main.o"
     "$WD/bin/run"
