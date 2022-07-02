@@ -16,10 +16,9 @@ syn region String start=+"+ skip=+\\"+ end=+"+ contains=ocSpecial
 hi def link ocSpecial SpecialChar
 
 " NOTE: See `http://vimdoc.sourceforge.net/htmldoc/syntax.html`.
-syn keyword Conditional
+syn keyword Statement
     \ if
     \ else
-syn keyword Statement
     \ let
     \ unpack
 syn keyword Keyword
