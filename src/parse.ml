@@ -280,13 +280,25 @@ and parse_exprs (tokens : token Queue.t) : expr list =
   | None -> []
   | Some expr -> expr :: parse_exprs tokens
 
+let rec return_last : expr list -> expr list =
+  function
+  | ExprRet _ :: _
+  | ExprDrop _ :: _
+  | [ExprAssign _] -> assert false
+  | [] -> []
+  | [ExprIfThen (condition, exprs_then, exprs_else)] ->
+    [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
+  | [expr] -> [ExprRet expr]
+  | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
+  | expr :: exprs -> ExprDrop expr :: return_last exprs
+
 let parse_func (tokens : token Queue.t) : func =
   let label : string =
     match Queue.pop tokens with
     | TokenIdent x -> x
     | _ -> assert false in
   let args : string list = parse_args tokens in
-  let body : expr list = parse_block tokens parse_exprs in
+  let body : expr list = return_last (parse_block tokens parse_exprs) in
   {
     label;
     args;
