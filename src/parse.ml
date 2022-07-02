@@ -228,7 +228,10 @@ and parse_if (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
    | TokenElse -> ()
    | _ -> assert false);
-  let exprs_else : expr list = parse_block tokens parse_exprs in
+  let exprs_else : expr list =
+    match Queue.peek tokens with
+    | TokenIf -> [parse_if tokens]
+    | _ -> parse_block tokens parse_exprs in
   ExprIfThen (condition, exprs_then, exprs_else)
 
 and parse_branch (tokens : token Queue.t) : branch option =
