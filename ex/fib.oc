@@ -1,15 +1,22 @@
 _entry_ {
     (printf "%ld\n" (fib 50 0 1))
-    let x (pack 1 "%s\n" "Here!")
+    (f (pack 0))
+    (f (pack 1 "path"))
+    0
+}
+
+f x {
     unpack x {
         {
-            (printf "!\n")
+            let y (+ 1 2)
+            (printf "first %d\n" y)
         }
-        a b {
-            (printf a b)
+        y {
+            (printf "second %s\n" y)
         }
     }
-    0
+    let y (- 1 1)
+    y
 }
 
 fib n a b {
