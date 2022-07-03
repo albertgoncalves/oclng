@@ -184,8 +184,8 @@ let rec compile_pack_args (offset : int) : string list -> unit =
   | [] -> ()
   | str :: strs ->
     (
-      append_local str;
       append_inst (InstPush (OpDeref (RegR11, WordSizeQWord, 8 * offset)));
+      append_local str;
       compile_pack_args (offset + 1) strs
     )
 
@@ -394,9 +394,7 @@ and compile_if_condition (label_else : string) : expr -> unit =
     )
   | _ -> assert false
 
-and compile_branch
-    (label_end : string)
-    ((args, exprs) : branch) : string =
+and compile_branch (label_end : string) ((args, exprs) : branch) : string =
   let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
   let n_locals : int = context.n_locals in
@@ -433,8 +431,8 @@ let rec compile_func_args (regs : reg list) : string list -> unit =
       | [] -> assert false
       | reg :: regs ->
         (
-          append_local str;
           append_inst (InstPush (OpReg reg));
+          append_local str;
           compile_func_args regs strs
         )
     )
