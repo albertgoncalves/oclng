@@ -1,0 +1,10 @@
+f0 x {
+    (- 1 x)
+}
+
+_entry_ {
+    let f1 f0
+    let f2 f1
+    (printf "%ld\n" (f2 124))
+    0
+}

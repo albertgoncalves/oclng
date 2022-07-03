@@ -185,6 +185,10 @@ let rec compile_pack_args (offset : int) : string list -> unit =
       compile_pack_args (offset + 1) strs
     )
 
+let get_local (n : int) : op =
+  let offset : int = -((n + 1) * 8) in
+  OpDeref (RegRbp, WordSizeQWord, offset)
+
 let rec compile_expr : expr -> unit =
   function
   | ExprDrop expr ->
@@ -220,7 +224,10 @@ let rec compile_expr : expr -> unit =
           | 5 -> append_inst (InstCall (OpLabel "pack_5"))
           | 6 -> append_inst (InstCall (OpLabel "pack_6"))
           | _ -> assert false);
-       | CallLabel label -> append_inst (InstCall (OpLabel label)));
+       | CallLabel label ->
+         match Hashtbl.find_opt context.locals label with
+         | None -> append_inst (InstCall (OpLabel label))
+         | Some n -> append_inst (InstCall (get_local n)));
       append_inst (InstPush (OpReg RegRax))
     )
   | ExprStr str ->
@@ -236,8 +243,9 @@ let rec compile_expr : expr -> unit =
     append_inst (InstPush (OpLabel label))
   | ExprInt x -> append_inst (InstPush (OpImm x))
   | ExprVar var ->
-    let offset : int = -((Hashtbl.find context.locals var + 1) * 8) in
-    append_inst (InstPush (OpDeref (RegRbp, WordSizeQWord, offset)))
+    (match Hashtbl.find_opt context.locals var with
+     | Some n -> append_inst (InstPush (get_local n))
+     | None -> append_inst (InstPush (OpLabel var)))
   | ExprAssign (var, expr) ->
     (
       compile_expr expr;

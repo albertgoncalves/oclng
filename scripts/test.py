@@ -19,6 +19,9 @@ class Tests(TestCase):
     def test_fib(self):
         self.into_test("fib", 12586269025)
 
+    def test_function_pointer(self):
+        self.into_test("function_pointer", -123)
+
     def test_pack_unpack(self):
         self.into_test("pack_unpack", "\n".join([
             "first 123456",
