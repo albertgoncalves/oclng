@@ -357,6 +357,7 @@ and compile_call_args (regs : reg list) : expr list -> unit =
   | [] -> ()
   | expr :: exprs ->
     (
+      assert (not (is_assign expr));
       match regs with
       | [] -> assert false
       | reg :: regs ->
