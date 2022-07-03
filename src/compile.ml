@@ -32,6 +32,8 @@ type inst =
   | InstAdd of (op * op)
   | InstSub of (op * op)
   | InstXor of (op * op)
+  | InstInc of op
+  | InstDec of op
   | InstLabel of string
   | InstCall of op
   | InstJmp of op
@@ -121,6 +123,8 @@ let show_inst : inst -> string =
   | InstAdd (l, r) -> Printf.sprintf "\tadd %s, %s\n" (show_op l) (show_op r)
   | InstSub (l, r) -> Printf.sprintf "\tsub %s, %s\n" (show_op l) (show_op r)
   | InstXor (l, r) -> Printf.sprintf "\txor %s, %s\n" (show_op l) (show_op r)
+  | InstInc op -> Printf.sprintf "\tinc %s\n" (show_op op)
+  | InstDec op -> Printf.sprintf "\tdec %s\n" (show_op op)
   | InstLabel label -> Printf.sprintf "%s:\n" label
   | InstCall op -> Printf.sprintf "\tcall %s\n" (show_op op)
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
@@ -250,6 +254,27 @@ let rec compile_expr : expr -> unit =
     (
       compile_expr expr;
       append_local var
+    )
+  | ExprBinOp (BinOpAdd, expr, ExprInt 1)
+  | ExprBinOp (BinOpAdd, ExprInt 1, expr) ->
+    (
+      compile_expr expr;
+      append_insts
+        [
+          InstPop (OpReg RegR10);
+          InstInc (OpReg RegR10);
+          InstPush (OpReg RegR10);
+        ]
+    )
+  | ExprBinOp (BinOpSub, expr, ExprInt 1) ->
+    (
+      compile_expr expr;
+      append_insts
+        [
+          InstPop (OpReg RegR10);
+          InstDec (OpReg RegR10);
+          InstPush (OpReg RegR10);
+        ]
     )
   | ExprBinOp (bin_op, l, r) ->
     (
@@ -421,6 +446,7 @@ let rec opt_push_pop : inst list -> inst list =
     opt_push_pop insts
   | InstPush op_push :: InstPop op_pop :: insts ->
     InstMov (op_pop, op_push) :: opt_push_pop insts
+  | InstPush _ :: InstDrop _ :: insts -> opt_push_pop insts
   | inst :: insts -> inst :: opt_push_pop insts
 
 let rec opt_tail_call : inst list -> inst list =
