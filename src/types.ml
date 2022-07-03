@@ -20,6 +20,7 @@ and expr =
   | ExprStr of string
   | ExprVar of string
   | ExprAssign of (string * expr)
+  | ExprInject of (expr * int * expr)
   | ExprIfThen of (expr * expr list * expr list)
   | ExprBinOp of (bin_op * expr * expr)
   | ExprCall of (call * expr list)

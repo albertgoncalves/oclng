@@ -17,9 +17,10 @@ hi def link ocSpecial SpecialChar
 
 " NOTE: See `http://vimdoc.sourceforge.net/htmldoc/syntax.html`.
 syn keyword Statement
+    \ let
+    \ inject
     \ if
     \ else
-    \ let
     \ unpack
 syn keyword Keyword
     \ fflush

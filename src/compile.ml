@@ -255,6 +255,18 @@ let rec compile_expr : expr -> unit =
       compile_expr expr;
       append_local var
     )
+  | ExprInject (pointer, n, replacement) ->
+    (
+      compile_expr pointer;
+      compile_expr replacement;
+      append_insts
+        [
+          InstPop (OpReg RegR11);
+          InstPop (OpReg RegR10);
+          InstMov ((OpDeref (RegR10, WordSizeQWord, n * 8)), (OpReg RegR11));
+          InstPush (OpReg RegR10);
+        ]
+    )
   | ExprBinOp (BinOpAdd, expr, ExprInt 1)
   | ExprBinOp (BinOpAdd, ExprInt 1, expr) ->
     (

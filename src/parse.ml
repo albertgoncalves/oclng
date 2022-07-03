@@ -9,6 +9,7 @@ type token =
   | TokenAdd
   | TokenSub
   | TokenLet
+  | TokenInject
   | TokenIf
   | TokenElse
   | TokenUnpack
@@ -26,6 +27,7 @@ let show_token : token -> string =
   | TokenAdd -> "+"
   | TokenSub -> "-"
   | TokenLet -> "let"
+  | TokenInject -> "inject"
   | TokenIf -> "if"
   | TokenElse -> "else"
   | TokenUnpack -> "unpack"
@@ -53,6 +55,7 @@ let into_token : string -> token =
   | "+" -> TokenAdd
   | "-" -> TokenSub
   | "let" -> TokenLet
+  | "inject" -> TokenInject
   | "if" -> TokenIf
   | "else" -> TokenElse
   | "unpack" -> TokenUnpack
@@ -216,6 +219,25 @@ and parse_let (tokens : token Queue.t) : expr =
     | None -> assert false in
   ExprAssign (var, expr)
 
+and parse_inject (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenInject -> ()
+   | _ -> assert false);
+  let pointer : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  let n : int =
+    match Queue.pop tokens with
+    | TokenInt 0 -> assert false
+    | TokenInt n -> n
+    | _ -> assert false in
+  let replacement : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  ExprInject (pointer, n, replacement)
+
 and parse_if (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
    | TokenIf -> ()
@@ -271,6 +293,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
     Some (ExprStr x)
   | TokenLParen -> Some (parse_call tokens)
   | TokenLet -> Some (parse_let tokens)
+  | TokenInject -> Some (parse_inject tokens)
   | TokenIf -> Some (parse_if tokens)
   | TokenUnpack -> Some (parse_unpack tokens)
   | _ -> None

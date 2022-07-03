@@ -19,9 +19,15 @@ f1 {
     "second path!"
 }
 
+f2 {
+    "???"
+}
+
 _entry_ {
     (f0 (pack 0))
-    (f0 (pack 1 f1))
+    let x (pack 1 f2)
+    inject x 1 f1
+    (f0 x)
     (f0 (pack 2 1 2 3))
     (fflush 0)
 }
