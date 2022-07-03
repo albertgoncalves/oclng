@@ -25,5 +25,7 @@ syn keyword Keyword
     \ fflush
     \ printf
     \ pack
+syn keyword Function
+    \ _entry_
 
 let b:current_syntax = "oc"
