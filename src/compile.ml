@@ -468,6 +468,13 @@ let rec opt_tail_call : inst list -> inst list =
   | InstCall op :: InstRet :: insts -> InstJmp op :: opt_tail_call insts
   | inst :: insts -> inst :: opt_tail_call insts
 
+let rec opt_jump : inst list -> inst list =
+  function
+  | [] -> []
+  | InstJmp (OpLabel label0) :: InstLabel label1 :: insts
+    when label0 = label1 -> InstLabel label1 :: opt_jump insts
+  | inst :: insts -> inst :: opt_jump insts
+
 let compile (funcs : func list) : Buffer.t =
   List.iter compile_func funcs;
   let buffer : Buffer.t = Buffer.create 1024 in
@@ -486,6 +493,7 @@ let compile (funcs : func list) : Buffer.t =
   |> List.of_seq
   |> opt_push_pop
   |> opt_tail_call
+  |> opt_jump
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
   Buffer.add_string buffer "section '.rodata'\n";
   Hashtbl.iter
