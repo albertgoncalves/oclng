@@ -1,0 +1,64 @@
+list h f x {
+    (pack 0 h f x)
+}
+
+head l {
+    unpack l {
+        h f x {
+            h
+        }
+        h f y {
+            h
+        }
+    }
+}
+
+tail l {
+    unpack l {
+        h f x {
+            let y (f x)
+            inject l 0 1
+            inject l 3 y
+            y
+        }
+        h f y {
+            y
+        }
+    }
+}
+
+drop n l {
+    if (= n 0) {
+        l
+    } else {
+        (drop (- n 1) (tail l))
+    }
+}
+
+f0 l {
+    (list 1 f1 l)
+}
+
+f1 l {
+    (zip_with l (tail l))
+}
+
+zip_with l0 l1 {
+    (list (+ (head l0) (head l1)) f2 (pack 0 l0 l1))
+}
+
+f2 x {
+    unpack x {
+        l0 l1 {
+            (zip_with (tail l0) (tail l1))
+        }
+    }
+}
+
+_entry_ {
+    let fibs (list 0 0 0)
+    inject fibs 2 f0
+    inject fibs 3 fibs
+    (printf "%ld\n" (head (drop 15 fibs)))
+    0
+}

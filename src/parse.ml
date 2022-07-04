@@ -229,7 +229,6 @@ and parse_inject (tokens : token Queue.t) : expr =
     | None -> assert false in
   let n : int =
     match Queue.pop tokens with
-    | TokenInt 0 -> assert false
     | TokenInt n -> n
     | _ -> assert false in
   let replacement : expr =

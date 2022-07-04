@@ -2,7 +2,7 @@
 
 set -eu
 
-memory_cap=512
+memory_cap=1024
 flags_ocaml=(
     -nolabels
     -strict-formats
