@@ -2,12 +2,21 @@ format ELF64
 
 public _start
 
+extrn fflush
+extrn stdout
+extrn stderr
+
 extrn _entry_
 
 section '.text' executable
     _start:
         call _entry_
-        mov rdi, rax
+        push rax
+        mov rdi, [stdout]
+        call fflush
+        mov rdi, [stderr]
+        call fflush
+        pop rdi
         mov eax, 60
         syscall
 

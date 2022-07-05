@@ -482,7 +482,6 @@ let compile (funcs : func list) : Buffer.t =
     "format ELF64\n\
      public _entry_\n\
      extrn printf\n\
-     extrn fflush\n\
      extrn pack_1\n\
      extrn pack_2\n\
      extrn pack_3\n\
