@@ -12,7 +12,7 @@ type token =
   | TokenInject
   | TokenIf
   | TokenElse
-  | TokenReturn
+  | TokenRet
   | TokenUnpack
   | TokenInt of int
   | TokenIdent of string
@@ -31,7 +31,7 @@ let show_token : token -> string =
   | TokenInject -> "inject"
   | TokenIf -> "if"
   | TokenElse -> "else"
-  | TokenReturn -> "return"
+  | TokenRet -> "return"
   | TokenUnpack -> "unpack"
   | TokenInt x -> string_of_int x
   | TokenIdent x -> x
@@ -60,7 +60,7 @@ let into_token : string -> token =
   | "inject" -> TokenInject
   | "if" -> TokenIf
   | "else" -> TokenElse
-  | "return" -> TokenReturn
+  | "return" -> TokenRet
   | "unpack" -> TokenUnpack
   | cs ->
     (
@@ -260,7 +260,7 @@ and parse_if (tokens : token Queue.t) : expr =
 
 and parse_return_if (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
-   | TokenReturn -> ()
+   | TokenRet -> ()
    | _ -> assert false);
   let expr_then : expr =
     match parse_expr tokens with
@@ -274,7 +274,7 @@ and parse_return_if (tokens : token Queue.t) : expr =
     | Some expr -> expr
     | None -> assert false in
   let exprs_else = parse_exprs tokens in
-  ExprReturnIf (condition, ExprRet expr_then, exprs_else)
+  ExprRetIf (condition, ExprRet expr_then, exprs_else)
 
 and parse_branch (tokens : token Queue.t) : branch option =
   let args : string list = parse_args tokens in
@@ -315,7 +315,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
   | TokenLet -> Some (parse_let tokens)
   | TokenInject -> Some (parse_inject tokens)
   | TokenIf -> Some (parse_if tokens)
-  | TokenReturn -> Some (parse_return_if tokens)
+  | TokenRet -> Some (parse_return_if tokens)
   | TokenUnpack -> Some (parse_unpack tokens)
   | _ -> None
 
@@ -332,8 +332,8 @@ let rec return_last : expr list -> expr list =
   | [] -> []
   | [ExprIfThen (condition, exprs_then, exprs_else)] ->
     [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
-  | [ExprReturnIf (condition, expr_return, exprs_else)] ->
-    [ExprReturnIf (condition, expr_return, return_last exprs_else)]
+  | [ExprRetIf (condition, expr_return, exprs_else)] ->
+    [ExprRetIf (condition, expr_return, return_last exprs_else)]
   | [expr] -> [ExprRet expr]
   | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
   | expr :: exprs -> ExprDrop expr :: return_last exprs

@@ -22,7 +22,7 @@ and expr =
   | ExprAssign of (string * expr)
   | ExprInject of (expr * int * expr)
   | ExprIfThen of (expr * expr list * expr list)
-  | ExprReturnIf of (expr * expr * expr list)
+  | ExprRetIf of (expr * expr * expr list)
   | ExprBinOp of (bin_op * expr * expr)
   | ExprCall of (call * expr list)
   | ExprUnpack of (expr * branch list)

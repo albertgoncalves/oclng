@@ -330,7 +330,7 @@ let rec compile_expr : expr -> unit =
         assert false
       )
     )
-  | ExprReturnIf (condition, expr_return, exprs_else) ->
+  | ExprRetIf (condition, expr_return, exprs_else) ->
     (* NOTE: These checks could be moved into `parse.ml`! *)
     assert (not (is_assign condition));
     assert (not (is_assign expr_return));
