@@ -329,6 +329,18 @@ let rec compile_expr : expr -> unit =
           InstPush (OpReg RegR10);
         ]
     )
+  | ExprIfThen (ExprInt 0, _, exprs)
+  | ExprIfThen (ExprInt _, exprs, _) ->
+    (
+      let n_locals : int = context.n_locals in
+      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
+      List.iter compile_expr exprs;
+      if context.n_locals <> n_locals then (
+        assert (n_locals < context.n_locals);
+        context.n_locals <- n_locals;
+        context.locals <- locals
+      )
+    )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
       assert (not (is_assign condition));
@@ -355,6 +367,12 @@ let rec compile_expr : expr -> unit =
       ) else (
         assert false
       )
+    )
+  | ExprRetIf (ExprInt 0, _, exprs) -> List.iter compile_expr exprs
+  | ExprRetIf (ExprInt _, expr, _) ->
+    (
+      assert (not (is_assign expr));
+      compile_expr expr
     )
   | ExprRetIf (condition, expr_return, exprs_else) ->
     (* NOTE: These checks could be moved into `parse.ml`! *)
