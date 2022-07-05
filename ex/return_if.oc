@@ -1,0 +1,11 @@
+_entry_ {
+    unpack (pack 0 0 "!") {
+        x y {
+            (printf "%s\n" y)
+            return x if (= 0 0)
+            1
+        }
+    }
+    (printf "did not return\n")
+    1
+}

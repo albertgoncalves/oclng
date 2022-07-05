@@ -447,6 +447,20 @@ let rec compile_func_args (regs : reg list) : string list -> unit =
         )
     )
 
+let rec return_last : expr list -> expr list =
+  function
+  | ExprRet _ :: _
+  | ExprDrop _ :: _
+  | [ExprAssign _] -> assert false
+  | [] -> []
+  | [ExprIfThen (condition, exprs_then, exprs_else)] ->
+    [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
+  | [ExprRetIf (condition, expr_return, exprs_else)] ->
+    [ExprRetIf (condition, expr_return, return_last exprs_else)]
+  | [expr] -> [ExprRet expr]
+  | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
+  | expr :: exprs -> ExprDrop expr :: return_last exprs
+
 let compile_func (func : func) : unit =
   context.need_stack <- (List.length func.args <> 0) || (need_stack func.body);
   context.n_locals <- 0;
@@ -457,7 +471,7 @@ let compile_func (func : func) : unit =
   );
   compile_func_args arg_regs func.args;
   assert ((List.length func.body) <> 0);
-  List.iter compile_expr func.body
+  List.iter compile_expr (return_last func.body)
 
 let rec opt_push_pop : inst list -> inst list =
   function

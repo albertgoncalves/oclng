@@ -32,6 +32,9 @@ class Tests(TestCase):
             "1 2 3",
         ]))
 
+    def test_return_if(self):
+        self.into_test("return_if", "!")
+
 
 if __name__ == "__main__":
     main()
