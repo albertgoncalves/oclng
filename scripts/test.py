@@ -16,8 +16,8 @@ class Tests(TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.decode(), f"{expected}\n")
 
-    def test_fib(self):
-        self.into_test("fib", 12586269025)
+    def test_fib_tco(self):
+        self.into_test("fib_tco", 12586269025)
 
     def test_fib_lazy(self):
         self.into_test("fib_lazy", 610)
