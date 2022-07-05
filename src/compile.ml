@@ -170,6 +170,7 @@ let is_assign : expr -> bool =
 let rec returns : expr list -> bool =
   function
   | [] -> assert false
+  | [ExprRetIf (_, _, exprs)] -> returns exprs
   | [ExprIfThen (_, exprs_then, exprs_else)] ->
     if returns exprs_then then (
       assert (returns exprs_else);
@@ -178,8 +179,23 @@ let rec returns : expr list -> bool =
       assert (not (returns exprs_else));
       false
     )
+  | [ExprUnpack (_, [(_, exprs)])] -> returns exprs
+  | [ExprUnpack (_, branches)] -> returns_branches branches
   | [ExprRet _] -> true
+  | [_] -> false
   | _ :: exprs -> returns exprs
+
+and returns_branches : branch list -> bool =
+  function
+  | (_, exprs) :: branches ->
+    if returns exprs then (
+      assert (List.for_all (fun x -> returns (snd x)) branches);
+      true
+    ) else (
+      assert (List.for_all (fun x -> not (returns (snd x))) branches);
+      false
+    )
+  | [] -> assert false
 
 let rec compile_pack_args (offset : int) : string list -> unit =
   function
@@ -349,6 +365,32 @@ let rec compile_expr : expr -> unit =
     compile_expr expr_return;
     append_inst (InstLabel label_else);
     List.iter compile_expr exprs_else;
+  | ExprUnpack (packed, [(args, exprs)]) ->
+    (
+      assert (not (is_assign packed));
+      compile_expr packed;
+      append_inst (InstPop (OpReg RegR11));
+      let n_locals : int = context.n_locals in
+      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
+      compile_pack_args 1 args;
+      let returns_exprs : bool = returns exprs in
+      List.iter compile_expr exprs;
+      if not returns_exprs then (
+        append_inst (InstPop (OpReg RegRax))
+      );
+      let new_n_locals : int = context.n_locals in
+      if new_n_locals <> n_locals then (
+        assert (n_locals < new_n_locals);
+        if not returns_exprs then (
+          append_inst (InstDrop (8 * (new_n_locals - n_locals)))
+        );
+        context.n_locals <- n_locals;
+        context.locals <- locals
+      );
+      if not returns_exprs then (
+        append_inst (InstPush (OpReg RegRax))
+      )
+    )
   | ExprUnpack (packed, branches) ->
     (
       assert (not (is_assign packed));
@@ -363,11 +405,13 @@ let rec compile_expr : expr -> unit =
         ];
       let label_branches : string list =
         List.map (compile_branch label_end) branches in
-      append_insts
-        [
-          InstLabel label_end;
-          InstPush (OpReg RegRax);
-        ];
+      if not (returns_branches branches) then (
+        append_insts
+          [
+            InstLabel label_end;
+            InstPush (OpReg RegRax);
+          ]
+      );
       Queue.add (label_table, label_branches) context.tables
     )
 
@@ -420,16 +464,23 @@ and compile_branch (label_end : string) ((args, exprs) : branch) : string =
   let n_locals : int = context.n_locals in
   let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
   compile_pack_args 1 args;
+  let returns_exprs : bool = returns exprs in
   List.iter compile_expr exprs;
-  append_inst (InstPop (OpReg RegRax));
+  if not returns_exprs then (
+    append_inst (InstPop (OpReg RegRax))
+  );
   let new_n_locals : int = context.n_locals in
   if new_n_locals <> n_locals then (
     assert (n_locals < new_n_locals);
-    append_inst (InstDrop (8 * (new_n_locals - n_locals)));
+    if not returns_exprs then (
+      append_inst (InstDrop (8 * (new_n_locals - n_locals)))
+    );
     context.n_locals <- n_locals;
     context.locals <- locals
   );
-  append_inst (InstJmp (OpLabel label_end));
+  if not returns_exprs then (
+    append_inst (InstJmp (OpLabel label_end))
+  );
   label_branch
 
 let rec need_stack : expr list -> bool =
@@ -467,6 +518,14 @@ let rec return_last : expr list -> expr list =
     [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
   | [ExprRetIf (condition, expr_return, exprs_else)] ->
     [ExprRetIf (condition, expr_return, return_last exprs_else)]
+  | [ExprUnpack (packed, branches)] ->
+    [
+      ExprUnpack
+        (
+          packed,
+          List.map (fun (args, exprs) -> (args, return_last exprs)) branches
+        )
+    ]
   | [expr] -> [ExprRet expr]
   | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
   | expr :: exprs -> ExprDrop expr :: return_last exprs
