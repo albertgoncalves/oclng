@@ -274,7 +274,7 @@ and parse_return_if (tokens : token Queue.t) : expr =
     | Some expr -> expr
     | None -> assert false in
   let exprs_else = parse_exprs tokens in
-  ExprIfThen (condition, [expr_then], exprs_else)
+  ExprReturnIf (condition, ExprRet expr_then, exprs_else)
 
 and parse_branch (tokens : token Queue.t) : branch option =
   let args : string list = parse_args tokens in
@@ -332,6 +332,8 @@ let rec return_last : expr list -> expr list =
   | [] -> []
   | [ExprIfThen (condition, exprs_then, exprs_else)] ->
     [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
+  | [ExprReturnIf (condition, expr_return, exprs_else)] ->
+    [ExprReturnIf (condition, expr_return, return_last exprs_else)]
   | [expr] -> [ExprRet expr]
   | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
   | expr :: exprs -> ExprDrop expr :: return_last exprs

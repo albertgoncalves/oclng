@@ -330,6 +330,15 @@ let rec compile_expr : expr -> unit =
         assert false
       )
     )
+  | ExprReturnIf (condition, expr_return, exprs_else) ->
+    (* NOTE: These checks could be moved into `parse.ml`! *)
+    assert (not (is_assign condition));
+    assert (not (is_assign expr_return));
+    let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
+    compile_if_condition label_else condition;
+    compile_expr expr_return;
+    append_inst (InstLabel label_else);
+    List.iter compile_expr exprs_else;
   | ExprUnpack (packed, branches) ->
     (
       assert (not (is_assign packed));
