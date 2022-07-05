@@ -53,6 +53,7 @@ type context =
     mutable locals : (string, int) Hashtbl.t;
     insts : inst Queue.t;
     tables : (string * (string list)) Queue.t;
+    externs : (string, unit) Hashtbl.t;
   }
 
 let context : context =
@@ -64,6 +65,7 @@ let context : context =
     locals = Hashtbl.create 8;
     insts = Queue.create ();
     tables = Queue.create ();
+    externs = Hashtbl.create 8;
   }
 
 let arg_regs : reg list = [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
@@ -214,20 +216,28 @@ let rec compile_expr : expr -> unit =
       compile_call_args arg_regs args;
       (match call with
        | CallIntrin IntrinPrintf ->
-         append_insts
-           [
-             InstXor (OpReg RegEax, OpReg RegEax);
-             InstCall (OpLabel "printf");
-           ]
+         (
+           Hashtbl.replace context.externs "printf" ();
+           append_insts
+             [
+               InstXor (OpReg RegEax, OpReg RegEax);
+               InstCall (OpLabel "printf");
+             ]
+         )
        | CallIntrin IntrinPack ->
-         (match List.length args with
-          | 1 -> append_inst (InstCall (OpLabel "pack_1"))
-          | 2 -> append_inst (InstCall (OpLabel "pack_2"))
-          | 3 -> append_inst (InstCall (OpLabel "pack_3"))
-          | 4 -> append_inst (InstCall (OpLabel "pack_4"))
-          | 5 -> append_inst (InstCall (OpLabel "pack_5"))
-          | 6 -> append_inst (InstCall (OpLabel "pack_6"))
-          | _ -> assert false);
+         (
+           let label : string =
+             match List.length args with
+             | 1 -> "pack_1"
+             | 2 -> "pack_2"
+             | 3 -> "pack_3"
+             | 4 -> "pack_4"
+             | 5 -> "pack_5"
+             | 6 -> "pack_6"
+             | _ -> assert false in
+           Hashtbl.replace context.externs label ();
+           append_inst (InstCall (OpLabel label))
+         )
        | CallLabel label ->
          match Hashtbl.find_opt context.locals label with
          | None -> append_inst (InstCall (OpLabel label))
@@ -503,14 +513,10 @@ let compile (funcs : func list) : Buffer.t =
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
     "format ELF64\n\
-     public _entry_\n\
-     extrn printf\n\
-     extrn pack_1\n\
-     extrn pack_2\n\
-     extrn pack_3\n\
-     extrn pack_4\n\
-     extrn pack_5\n\
-     extrn pack_6\n";
+     public _entry_\n";
+  Hashtbl.iter
+    (fun k _ -> Buffer.add_string buffer (Printf.sprintf "extrn %s\n" k))
+    context.externs;
   Queue.to_seq context.insts
   |> List.of_seq
   |> opt_push_pop
