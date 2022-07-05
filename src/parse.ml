@@ -12,6 +12,7 @@ type token =
   | TokenInject
   | TokenIf
   | TokenElse
+  | TokenReturn
   | TokenUnpack
   | TokenInt of int
   | TokenIdent of string
@@ -30,6 +31,7 @@ let show_token : token -> string =
   | TokenInject -> "inject"
   | TokenIf -> "if"
   | TokenElse -> "else"
+  | TokenReturn -> "return"
   | TokenUnpack -> "unpack"
   | TokenInt x -> string_of_int x
   | TokenIdent x -> x
@@ -58,6 +60,7 @@ let into_token : string -> token =
   | "inject" -> TokenInject
   | "if" -> TokenIf
   | "else" -> TokenElse
+  | "return" -> TokenReturn
   | "unpack" -> TokenUnpack
   | cs ->
     (
@@ -255,6 +258,24 @@ and parse_if (tokens : token Queue.t) : expr =
     | _ -> parse_block tokens parse_exprs in
   ExprIfThen (condition, exprs_then, exprs_else)
 
+and parse_return_if (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenReturn -> ()
+   | _ -> assert false);
+  let expr_then : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  (match Queue.pop tokens with
+   | TokenIf -> ()
+   | _ -> assert false);
+  let condition : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  let exprs_else = parse_exprs tokens in
+  ExprIfThen (condition, [expr_then], exprs_else)
+
 and parse_branch (tokens : token Queue.t) : branch option =
   let args : string list = parse_args tokens in
   match Queue.peek tokens with
@@ -294,6 +315,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
   | TokenLet -> Some (parse_let tokens)
   | TokenInject -> Some (parse_inject tokens)
   | TokenIf -> Some (parse_if tokens)
+  | TokenReturn -> Some (parse_return_if tokens)
   | TokenUnpack -> Some (parse_unpack tokens)
   | _ -> None
 

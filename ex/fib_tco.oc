@@ -4,9 +4,6 @@ _entry_ {
 }
 
 fib n a b {
-    if (= n 0) {
-        a
-    } else {
-        (fib (- n 1) b (+ a b))
-    }
+    return a if (= n 0)
+    (fib (- n 1) b (+ a b))
 }

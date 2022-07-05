@@ -17,6 +17,7 @@ hi def link ocSpecial SpecialChar
 
 " NOTE: See `http://vimdoc.sourceforge.net/htmldoc/syntax.html`.
 syn keyword Statement
+    \ return
     \ let
     \ inject
     \ if
