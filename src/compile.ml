@@ -425,7 +425,7 @@ and compile_branch (label_end : string) ((args, exprs) : branch) : string =
 let rec need_stack : expr list -> bool =
   function
   | [] -> false
-  | (ExprAssign _) :: _ -> true
+  | (ExprAssign _) :: _
   | (ExprUnpack _) :: _ -> true
   | (ExprIfThen (ExprAssign _, _, _)) :: _ -> assert false
   | (ExprIfThen (_, exprs_then, exprs_else)) :: exprs ->
