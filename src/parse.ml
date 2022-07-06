@@ -246,8 +246,8 @@ and parse_if (tokens : token Queue.t) : expr =
    | _ -> assert false);
   let condition : expr =
     match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
+    | Some (ExprAssign _) | None -> assert false
+    | Some expr -> expr in
   let exprs_then : expr list = parse_block tokens parse_exprs in
   (match Queue.pop tokens with
    | TokenElse -> ()
@@ -264,15 +264,15 @@ and parse_return_if (tokens : token Queue.t) : expr =
    | _ -> assert false);
   let expr_then : expr =
     match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
+    | Some (ExprAssign _) | None -> assert false
+    | Some expr -> expr in
   (match Queue.pop tokens with
    | TokenIf -> ()
    | _ -> assert false);
   let condition : expr =
     match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
+    | Some (ExprAssign _) | None -> assert false
+    | Some expr -> expr in
   let exprs_else = parse_exprs tokens in
   ExprRetIf (condition, ExprRet expr_then, exprs_else)
 
@@ -295,8 +295,8 @@ and parse_unpack (tokens : token Queue.t) : expr =
    | _ -> assert false);
   let packed : expr =
     match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
+    | Some (ExprAssign _) | None -> assert false
+    | Some expr -> expr in
   let branches : branch list = parse_block tokens parse_branches in
   ExprUnpack (packed, branches)
 

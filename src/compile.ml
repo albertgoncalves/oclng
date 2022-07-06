@@ -343,7 +343,6 @@ let rec compile_expr : expr -> unit =
     )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
-      assert (not (is_assign condition));
       let returns_then : bool = returns exprs_then in
       let returns_else : bool = returns exprs_else in
       let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
@@ -375,9 +374,6 @@ let rec compile_expr : expr -> unit =
       compile_expr expr
     )
   | ExprRetIf (condition, expr_return, exprs_else) ->
-    (* NOTE: These checks could be moved into `parse.ml`! *)
-    assert (not (is_assign condition));
-    assert (not (is_assign expr_return));
     let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
     compile_if_condition label_else condition;
     compile_expr expr_return;
@@ -385,7 +381,6 @@ let rec compile_expr : expr -> unit =
     List.iter compile_expr exprs_else;
   | ExprUnpack (packed, [(args, exprs)]) ->
     (
-      assert (not (is_assign packed));
       compile_expr packed;
       append_inst (InstPop (OpReg RegR11));
       let n_locals : int = context.n_locals in
@@ -411,7 +406,6 @@ let rec compile_expr : expr -> unit =
     )
   | ExprUnpack (packed, branches) ->
     (
-      assert (not (is_assign packed));
       let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
       let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
       compile_expr packed;
