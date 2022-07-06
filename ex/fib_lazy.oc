@@ -32,29 +32,29 @@ drop n l {
     (drop (- n 1) (tail l))
 }
 
-f0 l {
-    (list 1 f1 l)
-}
-
-f1 l {
-    (zip_with l (tail l))
-}
-
 zip_with l0 l1 {
-    (list (+ (head l0) (head l1)) f2 (pack 0 l0 l1))
-}
-
-f2 x {
-    unpack x {
-        l0 l1 {
-            (zip_with (tail l0) (tail l1))
+    (
+        list
+        (+ (head l0) (head l1))
+        \x {
+            unpack x {
+                l0 l1 {
+                    (zip_with (tail l0) (tail l1))
+                }
+            }
         }
-    }
+        (pack 0 l0 l1)
+    )
 }
 
 _entry_ {
     let fibs (list 0 0 0)
-    inject fibs 2 f0
+    inject
+        fibs
+        2
+        \l {
+            (list 1 \l { (zip_with l (tail l)) } l)
+        }
     inject fibs 3 fibs
     (printf "%ld\n" (head (drop 15 fibs)))
     0

@@ -5,6 +5,7 @@ type token =
   | TokenRParen
   | TokenLBrace
   | TokenRBrace
+  | TokenSlash
   | TokenEq
   | TokenAdd
   | TokenSub
@@ -24,6 +25,7 @@ let show_token : token -> string =
   | TokenRParen -> ")"
   | TokenLBrace -> "{"
   | TokenRBrace -> "}"
+  | TokenSlash -> "\\"
   | TokenEq -> "="
   | TokenAdd -> "+"
   | TokenSub -> "-"
@@ -36,6 +38,23 @@ let show_token : token -> string =
   | TokenInt x -> string_of_int x
   | TokenIdent x -> x
   | TokenStr x -> Printf.sprintf "\"%s\"" x
+
+type context =
+  {
+    mutable k : int;
+    funcs : func Queue.t;
+  }
+
+let context : context =
+  {
+    k = 0;
+    funcs = Queue.create ();
+  }
+
+let get_k () : int =
+  let k : int = context.k in
+  context.k <- context.k + 1;
+  k
 
 let is_digit : char -> bool =
   function
@@ -53,6 +72,7 @@ let into_token : string -> token =
   | ")" -> TokenRParen
   | "{" -> TokenLBrace
   | "}" -> TokenRBrace
+  | "\\" -> TokenSlash
   | "=" -> TokenEq
   | "+" -> TokenAdd
   | "-" -> TokenSub
@@ -136,7 +156,7 @@ let tokenize (source : bytes) : token Queue.t =
           let l : int = r + 1 in
           loop_token l l
         )
-      | '(' | ')' | '{' | '}' | '=' | '+' | '-' ->
+      | '(' | ')' | '{' | '}' | '\\' | '=' | '+' | '-' ->
         (
           if l <> r then (
             Queue.add (Bytes.sub_string source l (r - l)) tokens
@@ -300,6 +320,16 @@ and parse_unpack (tokens : token Queue.t) : expr =
   let branches : branch list = parse_block tokens parse_branches in
   ExprUnpack (packed, branches)
 
+and parse_fn (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenSlash -> ()
+   | _ -> assert false);
+  let args : string list = parse_args tokens in
+  let body : expr list = parse_block tokens parse_exprs in
+  let label : string = Printf.sprintf "_fn%d_" (get_k ()) in
+  Queue.add { label; args; body } context.funcs;
+  ExprVar label
+
 and parse_expr (tokens : token Queue.t) : expr option =
   match Queue.peek tokens with
   | TokenInt x ->
@@ -317,6 +347,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
   | TokenIf -> Some (parse_if tokens)
   | TokenRet -> Some (parse_return_if tokens)
   | TokenUnpack -> Some (parse_unpack tokens)
+  | TokenSlash -> Some (parse_fn tokens)
   | _ -> None
 
 and parse_exprs (tokens : token Queue.t) : expr list =
@@ -338,8 +369,7 @@ let parse_func (tokens : token Queue.t) : func =
   }
 
 let rec parse (tokens : token Queue.t) : func Queue.t =
-  let funcs : func Queue.t = Queue.create () in
   while (Queue.length tokens) <> 0 do
-    Queue.add (parse_func tokens) funcs
+    Queue.add (parse_func tokens) context.funcs
   done;
-  funcs
+  context.funcs
