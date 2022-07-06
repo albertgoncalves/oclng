@@ -368,11 +368,7 @@ let rec compile_expr : expr -> unit =
       )
     )
   | ExprRetIf (ExprInt 0, _, exprs) -> List.iter compile_expr exprs
-  | ExprRetIf (ExprInt _, expr, _) ->
-    (
-      assert (not (is_assign expr));
-      compile_expr expr
-    )
+  | ExprRetIf (ExprInt _, expr, _) -> compile_expr expr
   | ExprRetIf (condition, expr_return, exprs_else) ->
     let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
     compile_if_condition label_else condition;
