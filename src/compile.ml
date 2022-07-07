@@ -352,15 +352,21 @@ let rec compile_expr : expr -> unit =
       let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
       let n_locals : int = context.n_locals in
       let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
+      compile_if_condition label_else condition;
+      List.iter compile_expr exprs_then;
       if returns_then && returns_else then (
-        compile_if_condition label_else condition;
-        List.iter compile_expr exprs_then;
         reset_locals n_locals locals;
         append_inst (InstLabel label_else);
         List.iter compile_expr exprs_else;
         reset_locals n_locals locals
       ) else (
-        assert false
+        let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
+        append_inst (InstJmp (OpLabel label_end));
+        reset_locals n_locals locals;
+        append_inst (InstLabel label_else);
+        List.iter compile_expr exprs_else;
+        reset_locals n_locals locals;
+        append_inst (InstLabel label_end)
       )
     )
   | ExprUnpack (packed, branches) ->
