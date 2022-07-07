@@ -582,6 +582,14 @@ let rec opt_jump : inst list -> inst list =
     when label0 = label1 -> InstLabel label1 :: opt_jump insts
   | inst :: insts -> inst :: opt_jump insts
 
+let rec opt_dead : inst list -> inst list =
+  function
+  | [] -> []
+  | InstRet :: (InstLabel _  as label) :: insts ->
+    InstRet :: label :: opt_dead insts
+  | InstRet :: _ :: insts -> opt_dead (InstRet :: insts)
+  | expr :: exprs -> expr :: opt_dead exprs
+
 let compile (funcs : func list) : Buffer.t =
   List.iter compile_func funcs;
   let buffer : Buffer.t = Buffer.create 1024 in
@@ -596,6 +604,7 @@ let compile (funcs : func list) : Buffer.t =
   |> opt_push_pop
   |> opt_tail_call
   |> opt_jump
+  |> opt_dead
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
   Buffer.add_string buffer "section '.rodata'\n";
   Hashtbl.iter
