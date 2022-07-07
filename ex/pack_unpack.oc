@@ -15,18 +15,10 @@ f0 x {
     y
 }
 
-f1 {
-    "second path!"
-}
-
-f2 {
-    "???"
-}
-
 _entry_ {
     (f0 (pack 0))
-    let x (pack 1 f2)
-    inject x 1 f1
+    let x (pack 1 \ { "???" })
+    inject x 1 \ { "second path!" }
     (f0 x)
     (f0 (pack 2 1 2 3))
 }
