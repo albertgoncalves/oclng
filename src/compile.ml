@@ -328,20 +328,6 @@ let rec compile_expr : expr -> unit =
           InstPush (OpReg RegR10);
         ]
     )
-  | ExprIf (ExprInt 0, _) -> ()
-  | ExprIf (ExprInt _, exprs)
-  | ExprIfThen (ExprInt 0, _, exprs)
-  | ExprIfThen (ExprInt _, exprs, _) ->
-    (
-      let n_locals : int = context.n_locals in
-      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
-      List.iter compile_expr exprs;
-      if context.n_locals <> n_locals then (
-        assert (n_locals < context.n_locals);
-        context.n_locals <- n_locals;
-        context.locals <- locals
-      )
-    )
   | ExprIf (condition, exprs_then) ->
     (
       let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
@@ -380,31 +366,6 @@ let rec compile_expr : expr -> unit =
         )
       ) else (
         assert false
-      )
-    )
-  | ExprUnpack (packed, [(args, exprs)]) ->
-    (
-      compile_expr packed;
-      append_inst (InstPop (OpReg RegR11));
-      let n_locals : int = context.n_locals in
-      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
-      compile_pack_args 1 args;
-      let returns_exprs : bool = returns exprs in
-      List.iter compile_expr exprs;
-      if not returns_exprs then (
-        append_inst (InstPop (OpReg RegRax))
-      );
-      let new_n_locals : int = context.n_locals in
-      if new_n_locals <> n_locals then (
-        assert (n_locals < new_n_locals);
-        if not returns_exprs then (
-          append_inst (InstDrop (8 * (new_n_locals - n_locals)))
-        );
-        context.n_locals <- n_locals;
-        context.locals <- locals
-      );
-      if not returns_exprs then (
-        append_inst (InstPush (OpReg RegRax))
       )
     )
   | ExprUnpack (packed, branches) ->
@@ -582,14 +543,6 @@ let rec opt_jump : inst list -> inst list =
     when label0 = label1 -> InstLabel label1 :: opt_jump insts
   | inst :: insts -> inst :: opt_jump insts
 
-let rec opt_dead : inst list -> inst list =
-  function
-  | [] -> []
-  | InstRet :: (InstLabel _  as label) :: insts ->
-    InstRet :: label :: opt_dead insts
-  | InstRet :: _ :: insts -> opt_dead (InstRet :: insts)
-  | expr :: exprs -> expr :: opt_dead exprs
-
 let compile (funcs : func list) : Buffer.t =
   List.iter compile_func funcs;
   let buffer : Buffer.t = Buffer.create 1024 in
@@ -604,7 +557,6 @@ let compile (funcs : func list) : Buffer.t =
   |> opt_push_pop
   |> opt_tail_call
   |> opt_jump
-  |> opt_dead
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
   Buffer.add_string buffer "section '.rodata'\n";
   Hashtbl.iter
