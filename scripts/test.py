@@ -25,15 +25,15 @@ class Tests(TestCase):
     def test_function_pointer(self):
         self.into_test("function_pointer", -123)
 
+    def test_if_return(self):
+        self.into_test("if_return", "!")
+
     def test_pack_unpack(self):
         self.into_test("pack_unpack", "\n".join([
             "first 123456",
             "second path!",
             "1 2 3",
         ]))
-
-    def test_return_if(self):
-        self.into_test("return_if", "!")
 
 
 if __name__ == "__main__":

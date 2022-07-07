@@ -269,32 +269,25 @@ and parse_if (tokens : token Queue.t) : expr =
     | Some (ExprAssign _) | None -> assert false
     | Some expr -> expr in
   let exprs_then : expr list = parse_block tokens parse_exprs in
-  (match Queue.pop tokens with
-   | TokenElse -> ()
-   | _ -> assert false);
-  let exprs_else : expr list =
-    match Queue.peek tokens with
-    | TokenIf -> [parse_if tokens]
-    | _ -> parse_block tokens parse_exprs in
-  ExprIfThen (condition, exprs_then, exprs_else)
+  match Queue.peek tokens with
+  | TokenElse ->
+    let _ : token = Queue.pop tokens in
+    let exprs_else : expr list =
+      match Queue.peek tokens with
+      | TokenIf -> [parse_if tokens]
+      | _ -> parse_block tokens parse_exprs in
+    ExprIfThen (condition, exprs_then, exprs_else)
+  | _ -> ExprIf (condition, exprs_then)
 
-and parse_return_if (tokens : token Queue.t) : expr =
+and parse_return (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
    | TokenRet -> ()
    | _ -> assert false);
-  let expr_then : expr =
+  let expr : expr =
     match parse_expr tokens with
-    | Some (ExprAssign _) | None -> assert false
+    | Some (ExprRet _) | Some (ExprAssign _) | None -> assert false
     | Some expr -> expr in
-  (match Queue.pop tokens with
-   | TokenIf -> ()
-   | _ -> assert false);
-  let condition : expr =
-    match parse_expr tokens with
-    | Some (ExprAssign _) | None -> assert false
-    | Some expr -> expr in
-  let exprs_else = parse_exprs tokens in
-  ExprRetIf (condition, ExprRet expr_then, exprs_else)
+  ExprRet expr
 
 and parse_branch (tokens : token Queue.t) : branch option =
   let args : string list = parse_args tokens in
@@ -345,7 +338,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
   | TokenLet -> Some (parse_let tokens)
   | TokenInject -> Some (parse_inject tokens)
   | TokenIf -> Some (parse_if tokens)
-  | TokenRet -> Some (parse_return_if tokens)
+  | TokenRet -> Some (parse_return tokens)
   | TokenUnpack -> Some (parse_unpack tokens)
   | TokenSlash -> Some (parse_fn tokens)
   | _ -> None

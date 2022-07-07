@@ -2,7 +2,9 @@ _entry_ {
     unpack (pack 0 0 "!") {
         x y {
             (printf "%s\n" y)
-            return x if (= 0 0)
+            if (= 0 0) {
+                return x
+            }
             1
         }
     }

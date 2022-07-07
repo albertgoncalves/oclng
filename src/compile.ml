@@ -170,7 +170,6 @@ let is_assign : expr -> bool =
 let rec returns : expr list -> bool =
   function
   | [] -> assert false
-  | [ExprRetIf (_, _, exprs)] -> returns exprs
   | [ExprIfThen (_, exprs_then, exprs_else)] ->
     if returns exprs_then then (
       assert (returns exprs_else);
@@ -329,6 +328,8 @@ let rec compile_expr : expr -> unit =
           InstPush (OpReg RegR10);
         ]
     )
+  | ExprIf (ExprInt 0, _) -> ()
+  | ExprIf (ExprInt _, exprs)
   | ExprIfThen (ExprInt 0, _, exprs)
   | ExprIfThen (ExprInt _, exprs, _) ->
     (
@@ -340,6 +341,20 @@ let rec compile_expr : expr -> unit =
         context.n_locals <- n_locals;
         context.locals <- locals
       )
+    )
+  | ExprIf (condition, exprs_then) ->
+    (
+      let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
+      let n_locals : int = context.n_locals in
+      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
+      compile_if_condition label_else condition;
+      List.iter compile_expr exprs_then;
+      if context.n_locals <> n_locals then (
+        assert (n_locals < context.n_locals);
+        context.n_locals <- n_locals;
+        context.locals <- locals
+      );
+      append_inst (InstLabel label_else);
     )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
     (
@@ -367,14 +382,6 @@ let rec compile_expr : expr -> unit =
         assert false
       )
     )
-  | ExprRetIf (ExprInt 0, _, exprs) -> List.iter compile_expr exprs
-  | ExprRetIf (ExprInt _, expr, _) -> compile_expr expr
-  | ExprRetIf (condition, expr_return, exprs_else) ->
-    let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
-    compile_if_condition label_else condition;
-    compile_expr expr_return;
-    append_inst (InstLabel label_else);
-    List.iter compile_expr exprs_else;
   | ExprUnpack (packed, [(args, exprs)]) ->
     (
       compile_expr packed;
@@ -520,12 +527,11 @@ let rec return_last : expr list -> expr list =
   function
   | ExprRet _ :: _
   | ExprDrop _ :: _
+  | [ExprIf _]
   | [ExprAssign _] -> assert false
   | [] -> []
   | [ExprIfThen (condition, exprs_then, exprs_else)] ->
     [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
-  | [ExprRetIf (condition, expr_return, exprs_else)] ->
-    [ExprRetIf (condition, expr_return, return_last exprs_else)]
   | [ExprUnpack (packed, branches)] ->
     [
       ExprUnpack
@@ -535,6 +541,7 @@ let rec return_last : expr list -> expr list =
         )
     ]
   | [expr] -> [ExprRet expr]
+  | (ExprIf _ as expr) :: exprs
   | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
   | expr :: exprs -> ExprDrop expr :: return_last exprs
 

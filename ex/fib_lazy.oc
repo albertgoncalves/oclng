@@ -28,7 +28,9 @@ tail l {
 }
 
 drop n l {
-    return l if (= n 0)
+    if (= n 0) {
+        return l
+    }
     (drop (- n 1) (tail l))
 }
 
