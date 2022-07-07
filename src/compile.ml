@@ -210,6 +210,13 @@ let get_local (n : int) : op =
   let offset : int = -((n + 1) * 8) in
   OpDeref (RegRbp, WordSizeQWord, offset)
 
+let reset_locals (n_locals : int) (locals : (string, int) Hashtbl.t) : unit =
+  if context.n_locals <> n_locals then (
+    assert (n_locals < context.n_locals);
+    context.n_locals <- n_locals;
+    context.locals <- locals
+  )
+
 let rec compile_expr : expr -> unit =
   function
   | ExprDrop expr ->
@@ -335,11 +342,7 @@ let rec compile_expr : expr -> unit =
       let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
       compile_if_condition label_else condition;
       List.iter compile_expr exprs_then;
-      if context.n_locals <> n_locals then (
-        assert (n_locals < context.n_locals);
-        context.n_locals <- n_locals;
-        context.locals <- locals
-      );
+      reset_locals n_locals locals;
       append_inst (InstLabel label_else);
     )
   | ExprIfThen (condition, exprs_then, exprs_else) ->
@@ -352,18 +355,10 @@ let rec compile_expr : expr -> unit =
       if returns_then && returns_else then (
         compile_if_condition label_else condition;
         List.iter compile_expr exprs_then;
-        if context.n_locals <> n_locals then (
-          assert (n_locals < context.n_locals);
-          context.n_locals <- n_locals;
-          context.locals <- locals
-        );
+        reset_locals n_locals locals;
         append_inst (InstLabel label_else);
         List.iter compile_expr exprs_else;
-        if context.n_locals <> n_locals then (
-          assert (n_locals < context.n_locals);
-          context.n_locals <- n_locals;
-          context.locals <- locals
-        )
+        reset_locals n_locals locals
       ) else (
         assert false
       )
