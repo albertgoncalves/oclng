@@ -465,7 +465,6 @@ let rec need_stack : expr list -> bool =
   | [] -> false
   | (ExprAssign _) :: _
   | (ExprUnpack _) :: _ -> true
-  | (ExprIfThen (ExprAssign _, _, _)) :: _ -> assert false
   | (ExprIfThen (_, exprs_then, exprs_else)) :: exprs ->
     (need_stack exprs_then) || (need_stack exprs_else) || (need_stack exprs)
   | _ :: exprs -> need_stack exprs
