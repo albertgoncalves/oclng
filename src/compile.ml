@@ -140,12 +140,7 @@ let show_inst : inst -> string =
   | InstRet -> "\tret\n"
 
 let compile_string (str : string) (label : string) : string =
-  String.to_seq str
-  |> Seq.map Char.code
-  |> Seq.map string_of_int
-  |> List.of_seq
-  |> String.concat ","
-  |> Printf.sprintf "\t%s db %s,0\n" label
+  Printf.sprintf "\t%s db %s,0\n" label (show_string str)
 
 let compile_table ((table, branches) : (string * string list)) : string =
   Printf.sprintf "\t%s dq %s\n" table (String.concat "," branches)
@@ -516,7 +511,12 @@ let compile_func (func : func) : unit =
   );
   compile_func_args arg_regs func.args;
   assert ((List.length func.body) <> 0);
-  List.iter compile_expr (return_last func.body)
+  let body : expr list = return_last func.body in
+  Printf.fprintf
+    stderr
+    "%s\n"
+    (show_func { label = func.label; args = func.args; body });
+  List.iter compile_expr body
 
 let rec opt_push_pop : inst list -> inst list =
   function
