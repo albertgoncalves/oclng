@@ -138,8 +138,7 @@ let tokenize (source : bytes) : token Queue.t =
       Queue.add (Bytes.sub_string source l (r - l)) tokens
     else
       match Bytes.get source r with
-      | '#' ->
-        loop_comment (r + 1)
+      | '#' -> loop_comment (r + 1)
       | '"' ->
         (
           let buffer : Buffer.t = Buffer.create 32 in
@@ -363,7 +362,7 @@ let parse_func (tokens : token Queue.t) : func =
     body;
   }
 
-let rec parse (tokens : token Queue.t) : func Queue.t =
+let parse (tokens : token Queue.t) : func Queue.t =
   while (Queue.length tokens) <> 0 do
     Queue.add (parse_func tokens) context.funcs
   done;
