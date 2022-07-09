@@ -319,7 +319,7 @@ and parse_fn (tokens : token Queue.t) : expr =
    | _ -> assert false);
   let args : string list = parse_args tokens in
   let body : expr list = parse_block tokens parse_exprs in
-  let label : string = Printf.sprintf "_fn%d_" (get_k ()) in
+  let label : string = Printf.sprintf "_f%d_" (get_k ()) in
   Queue.add { label; args; body } context.funcs;
   ExprVar label
 
