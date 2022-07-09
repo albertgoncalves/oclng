@@ -479,27 +479,36 @@ let rec compile_func_args (regs : reg list) : string list -> unit =
         )
     )
 
-let rec return_last : expr list -> expr list =
+let rec return_last (prev : expr list) : expr list -> expr list =
   function
   | ExprRet _ :: _
   | ExprDrop _ :: _
   | [ExprIf _]
   | [ExprAssign _] -> assert false
-  | [] -> []
+  | [] -> List.rev prev
   | [ExprIfThen (condition, exprs_then, exprs_else)] ->
-    [ExprIfThen (condition, return_last exprs_then, return_last exprs_else)]
+    return_last
+      (
+        ExprIfThen
+          (
+            condition,
+            return_last [] exprs_then,
+            return_last [] exprs_else
+          ) :: prev
+      )
+      []
   | [ExprUnpack (packed, branches)] ->
-    [
+    return_last (
       ExprUnpack
         (
           packed,
-          List.map (fun (args, exprs) -> (args, return_last exprs)) branches
+          List.map (fun (args, exprs) -> (args, return_last [] exprs)) branches
         )
-    ]
-  | [expr] -> [ExprRet expr]
+      :: prev) []
+  | [expr] -> return_last (ExprRet expr :: prev) []
   | (ExprIf _ as expr) :: exprs
-  | (ExprAssign _ as expr) :: exprs -> expr :: return_last exprs
-  | expr :: exprs -> ExprDrop expr :: return_last exprs
+  | (ExprAssign _ as expr) :: exprs -> return_last (expr :: prev) exprs
+  | expr :: exprs -> return_last (ExprDrop expr :: prev) exprs
 
 let compile_func (func : func) : unit =
   context.need_stack <- (List.length func.args <> 0) || (need_stack func.body);
@@ -511,37 +520,37 @@ let compile_func (func : func) : unit =
   );
   compile_func_args arg_regs func.args;
   assert ((List.length func.body) <> 0);
-  let body : expr list = return_last func.body in
+  let body : expr list = return_last [] func.body in
   Printf.fprintf
     stderr
     "%s\n"
     (show_func { label = func.label; args = func.args; body });
   List.iter compile_expr body
 
-let rec opt_push_pop : inst list -> inst list =
+let rec opt_push_pop (prev : inst list) : inst list -> inst list =
   function
-  | [] -> []
+  | [] -> List.rev prev
   | InstPush op_push :: InstPop op_pop :: insts when op_push = op_pop ->
-    opt_push_pop insts
+    opt_push_pop prev insts
   | InstPush op_push :: InstPop op_pop :: insts ->
-    InstMov (op_pop, op_push) :: opt_push_pop insts
-  | InstPush _ :: InstDrop _ :: insts -> opt_push_pop insts
-  | inst :: insts -> inst :: opt_push_pop insts
+    opt_push_pop (InstMov (op_pop, op_push) :: prev) insts
+  | InstPush _ :: InstDrop _ :: insts -> opt_push_pop prev insts
+  | inst :: insts -> opt_push_pop (inst :: prev) insts
 
-let rec opt_tail_call : inst list -> inst list =
+let rec opt_tail_call (prev : inst list) : inst list -> inst list =
   function
-  | [] -> []
+  | [] -> List.rev prev
   | InstCall op :: InstLeave :: InstRet :: insts ->
-    InstLeave :: InstJmp op :: opt_tail_call insts
-  | InstCall op :: InstRet :: insts -> InstJmp op :: opt_tail_call insts
-  | inst :: insts -> inst :: opt_tail_call insts
+    opt_tail_call (InstJmp op :: InstLeave :: prev) insts
+  | InstCall op :: InstRet :: insts -> opt_tail_call (InstJmp op :: prev) insts
+  | inst :: insts -> opt_tail_call (inst :: prev) insts
 
-let rec opt_jump : inst list -> inst list =
+let rec opt_jump (prev : inst list) : inst list -> inst list =
   function
-  | [] -> []
+  | [] -> List.rev prev
   | InstJmp (OpLabel label0) :: InstLabel label1 :: insts
-    when label0 = label1 -> InstLabel label1 :: opt_jump insts
-  | inst :: insts -> inst :: opt_jump insts
+    when label0 = label1 -> opt_jump (InstLabel label1 :: prev) insts
+  | inst :: insts -> opt_jump (inst :: prev) insts
 
 let compile (funcs : func list) : Buffer.t =
   List.iter compile_func funcs;
@@ -554,9 +563,9 @@ let compile (funcs : func list) : Buffer.t =
     context.externs;
   Queue.to_seq context.insts
   |> List.of_seq
-  |> opt_push_pop
-  |> opt_tail_call
-  |> opt_jump
+  |> opt_push_pop []
+  |> opt_tail_call []
+  |> opt_jump []
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
   Buffer.add_string buffer "section '.rodata'\n";
   Hashtbl.iter

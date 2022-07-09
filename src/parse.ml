@@ -180,12 +180,14 @@ let tokenize (source : bytes) : token Queue.t =
   |> Seq.map into_token
   |> Queue.of_seq
 
-let rec parse_args (tokens : token Queue.t) : string list =
+let rec parse_args
+    (prev : string list)
+    (tokens : token Queue.t) : string list =
   match Queue.peek tokens with
   | TokenIdent x ->
     let _ : token = Queue.pop tokens in
-    x :: parse_args tokens
-  | _ -> []
+    parse_args (x :: prev) tokens
+  | _ -> List.rev prev
 
 let parse_block (tokens : token Queue.t) (f : token Queue.t -> 'a) : 'a =
   match Queue.pop tokens with
@@ -290,7 +292,7 @@ and parse_return (tokens : token Queue.t) : expr =
   ExprRet expr
 
 and parse_branch (tokens : token Queue.t) : branch option =
-  let args : string list = parse_args tokens in
+  let args : string list = parse_args [] tokens in
   match Queue.peek tokens with
   | TokenLBrace ->
     let exprs : expr list = parse_block tokens parse_exprs in
@@ -317,7 +319,7 @@ and parse_fn (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
    | TokenSlash -> ()
    | _ -> assert false);
-  let args : string list = parse_args tokens in
+  let args : string list = parse_args [] tokens in
   let body : expr list = parse_block tokens parse_exprs in
   let label : string = Printf.sprintf "_f%d_" (get_k ()) in
   Queue.add { label; args; body } context.funcs;
@@ -353,7 +355,7 @@ let parse_func (tokens : token Queue.t) : func =
     match Queue.pop tokens with
     | TokenIdent x -> x
     | _ -> assert false in
-  let args : string list = parse_args tokens in
+  let args : string list = parse_args [] tokens in
   let body : expr list = parse_block tokens parse_exprs in
   {
     label;
