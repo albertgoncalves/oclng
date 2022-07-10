@@ -1,0 +1,28 @@
+is_even x {
+    if (= x 0) {
+        return 1
+    }
+    (is_odd (- x 1))
+}
+
+is_odd x {
+    if (= x 0) {
+        return 0
+    }
+    (is_even (- x 1))
+}
+
+_entry_ {
+    let x 12345
+    (
+        printf
+        "%ld is %s\n"
+        x
+        if (= (is_even x) 1) {
+            "even"
+        } else {
+            "odd"
+        }
+    )
+    0
+}

@@ -16,6 +16,9 @@ class Tests(TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.decode(), f"{expected}\n")
 
+    def test_even_odd(self):
+        self.into_test("even_odd", "12345 is odd")
+
     def test_fib_tco(self):
         self.into_test("fib_tco", 12586269025)
 
