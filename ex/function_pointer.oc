@@ -1,5 +1,13 @@
+f0 {
+    (f3)
+}
+
+f3 {
+    1
+}
+
 _entry_ {
-    let f1 \x { (- 1 x) }
+    let f1 \x { (- (f0) x) }
     let f2 f1
     (printf "%ld\n" (f2 124))
     0

@@ -228,9 +228,12 @@ let rec compile_expr : expr -> unit =
       );
       append_inst InstRet
     )
-  | ExprCall (call, args) ->
+  | ExprCall (tail, call, args) ->
     (
       compile_call_args arg_regs args;
+      if tail && context.need_stack then (
+        append_inst InstLeave
+      );
       (match call with
        | CallIntrin IntrinPrintf ->
          (
@@ -238,7 +241,11 @@ let rec compile_expr : expr -> unit =
            append_insts
              [
                InstXor (OpReg RegEax, OpReg RegEax);
-               InstCall (OpLabel "printf");
+               let label : op = OpLabel "printf" in
+               if tail then
+                 InstJmp label
+               else
+                 InstCall label
              ]
          )
        | CallIntrin IntrinPack ->
@@ -253,13 +260,31 @@ let rec compile_expr : expr -> unit =
              | 6 -> "pack_6"
              | _ -> assert false in
            Hashtbl.replace context.externs label ();
-           append_inst (InstCall (OpLabel label))
+           append_inst
+             (
+               let label : op = OpLabel label in
+               if tail then
+                 InstJmp label
+               else
+                 InstCall label
+             )
          )
        | CallLabel label ->
-         match Hashtbl.find_opt context.locals label with
-         | None -> append_inst (InstCall (OpLabel label))
-         | Some n -> append_inst (InstCall (get_local n)));
-      append_inst (InstPush (OpReg RegRax))
+         let label : op =
+           match Hashtbl.find_opt context.locals label with
+           | None -> OpLabel label
+           | Some n -> get_local n in
+         append_inst
+           (
+             if tail then
+               InstJmp label
+             else
+               InstCall label
+           )
+      );
+      if not tail then (
+        append_inst (InstPush (OpReg RegRax))
+      )
     )
   | ExprStr str ->
     let label : string =
@@ -483,6 +508,7 @@ let rec return_last (prev : expr list) : expr list -> expr list =
   function
   | ExprRet _ :: _
   | ExprDrop _ :: _
+  | ExprCall (true, _, _) :: _
   | [ExprIf _]
   | [ExprAssign _] -> assert false
   | [] -> List.rev prev
@@ -505,6 +531,8 @@ let rec return_last (prev : expr list) : expr list -> expr list =
           List.map (fun (args, exprs) -> (args, return_last [] exprs)) branches
         )
       :: prev) []
+  | [ExprCall (false, call, args)] ->
+    return_last (ExprCall (true, call, args) :: prev) []
   | [expr] -> return_last (ExprRet expr :: prev) []
   | (ExprIf _ as expr) :: exprs
   | (ExprAssign _ as expr) :: exprs -> return_last (expr :: prev) exprs
@@ -537,14 +565,6 @@ let rec opt_push_pop (prev : inst list) : inst list -> inst list =
   | InstPush _ :: InstDrop _ :: insts -> opt_push_pop prev insts
   | inst :: insts -> opt_push_pop (inst :: prev) insts
 
-let rec opt_tail_call (prev : inst list) : inst list -> inst list =
-  function
-  | [] -> List.rev prev
-  | InstCall op :: InstLeave :: InstRet :: insts ->
-    opt_tail_call (InstJmp op :: InstLeave :: prev) insts
-  | InstCall op :: InstRet :: insts -> opt_tail_call (InstJmp op :: prev) insts
-  | inst :: insts -> opt_tail_call (inst :: prev) insts
-
 let rec opt_jump (prev : inst list) : inst list -> inst list =
   function
   | [] -> List.rev prev
@@ -564,7 +584,6 @@ let compile (funcs : func list) : Buffer.t =
   Queue.to_seq context.insts
   |> List.of_seq
   |> opt_push_pop []
-  |> opt_tail_call []
   |> opt_jump []
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
   Buffer.add_string buffer "section '.rodata'\n";

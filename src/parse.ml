@@ -210,7 +210,7 @@ let rec parse_call (tokens : token Queue.t) : expr =
         | "printf" -> CallIntrin (IntrinPrintf)
         | "pack" -> CallIntrin (IntrinPack)
         | _ -> CallLabel x in
-      ExprCall (call, args)
+      ExprCall (false, call, args)
     | TokenEq ->
       (match parse_exprs tokens with
        | [l; r] -> ExprBinOp (BinOpEq, l, r)

@@ -24,7 +24,7 @@ and expr =
   | ExprIf of (expr * expr list)
   | ExprIfThen of (expr * expr list * expr list)
   | ExprBinOp of (bin_op * expr * expr)
-  | ExprCall of (call * expr list)
+  | ExprCall of (bool * call * expr list)
   | ExprUnpack of (expr * branch list)
 
 type func =
@@ -92,8 +92,25 @@ let rec show_expr : expr -> string =
       (show_exprs exprs_else)
   | ExprBinOp (op, l, r) ->
     Printf.sprintf "(%s %s %s)" (show_bin_op op) (show_expr l) (show_expr r)
-  | ExprCall (call, exprs) ->
-    Printf.sprintf "(%s %s)" (show_call call) (show_exprs exprs)
+  | ExprCall (tail, call, []) ->
+    Printf.sprintf
+      (
+        if tail then
+          "tail (%s)"
+        else
+          "(%s)"
+      )
+      (show_call call)
+  | ExprCall (tail, call, args) ->
+    Printf.sprintf
+      (
+        if tail then
+          "tail (%s %s)"
+        else
+          "(%s %s)"
+      )
+      (show_call call)
+      (show_exprs args)
   | ExprUnpack (packed, branches) ->
     Printf.sprintf
       "unpack %s { %s }"
