@@ -183,6 +183,7 @@ let rec returns : expr list -> bool =
     )
   | [ExprUnpack (_, [(_, exprs)])] -> returns exprs
   | [ExprUnpack (_, branches)] -> returns_branches branches
+  | [ExprCall (true, _, _)] -> true
   | [ExprRet _] -> true
   | [_] -> false
   | _ :: exprs -> returns exprs
