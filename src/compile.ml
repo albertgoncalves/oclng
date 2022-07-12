@@ -54,6 +54,7 @@ type context =
     insts : inst Queue.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
+    mutable call_offset : int;
   }
 
 let context : context =
@@ -66,6 +67,7 @@ let context : context =
     insts = Queue.create ();
     tables = Queue.create ();
     externs = Hashtbl.create 8;
+    call_offset = 0;
   }
 
 let arg_regs : reg list = [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
@@ -149,7 +151,7 @@ let string_label : int -> string = Printf.sprintf "_s%d_"
 
 let append_local (var : string) : unit =
   assert (not (Hashtbl.mem context.locals var));
-  Hashtbl.add context.locals var context.n_locals;
+  Hashtbl.add context.locals var (context.n_locals + context.call_offset);
   context.n_locals <- context.n_locals + 1
 
 let append_inst (inst : inst) : unit =
@@ -423,8 +425,10 @@ and compile_call_args (regs : reg list) : expr list -> unit =
       | reg :: regs ->
         (
           compile_expr expr;
+          context.call_offset <- context.call_offset + 1;
           compile_call_args regs exprs;
-          append_inst (InstPop (OpReg reg))
+          append_inst (InstPop (OpReg reg));
+          context.call_offset <- context.call_offset - 1
         )
     )
 
