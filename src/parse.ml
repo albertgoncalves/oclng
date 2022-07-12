@@ -204,7 +204,7 @@ let rec parse_call (tokens : token Queue.t) : expr =
   let expr : expr =
     match Queue.pop tokens with
     | TokenIdent x ->
-      let args : expr list = parse_exprs tokens in
+      let args : expr list = parse_exprs [] tokens in
       let call : call =
         match x with
         | "printf" -> CallIntrin (IntrinPrintf)
@@ -212,15 +212,15 @@ let rec parse_call (tokens : token Queue.t) : expr =
         | _ -> CallLabel x in
       ExprCall (false, call, args)
     | TokenEq ->
-      (match parse_exprs tokens with
+      (match parse_exprs [] tokens with
        | [l; r] -> ExprBinOp (BinOpEq, l, r)
        | _ -> assert false)
     | TokenAdd ->
-      (match parse_exprs tokens with
+      (match parse_exprs [] tokens with
        | [l; r] -> ExprBinOp (BinOpAdd, l, r)
        | _ -> assert false)
     | TokenSub ->
-      (match parse_exprs tokens with
+      (match parse_exprs [] tokens with
        | [l; r] -> ExprBinOp (BinOpSub, l, r)
        | _ -> assert false)
     | _ -> assert false in
@@ -269,14 +269,14 @@ and parse_if (tokens : token Queue.t) : expr =
     match parse_expr tokens with
     | Some (ExprAssign _) | None -> assert false
     | Some expr -> expr in
-  let exprs_then : expr list = parse_block tokens parse_exprs in
+  let exprs_then : expr list = parse_block tokens (parse_exprs []) in
   match Queue.peek tokens with
   | TokenElse ->
     let _ : token = Queue.pop tokens in
     let exprs_else : expr list =
       match Queue.peek tokens with
       | TokenIf -> [parse_if tokens]
-      | _ -> parse_block tokens parse_exprs in
+      | _ -> parse_block tokens (parse_exprs []) in
     ExprIfThen (condition, exprs_then, exprs_else)
   | _ -> ExprIf (condition, exprs_then)
 
@@ -294,14 +294,16 @@ and parse_branch (tokens : token Queue.t) : branch option =
   let args : string list = parse_args [] tokens in
   match Queue.peek tokens with
   | TokenLBrace ->
-    let exprs : expr list = parse_block tokens parse_exprs in
+    let exprs : expr list = parse_block tokens (parse_exprs []) in
     Some (args, exprs)
   | _ -> None
 
-and parse_branches (tokens : token Queue.t) : branch list =
+and parse_branches
+    (prev : branch list)
+    (tokens : token Queue.t) : branch list =
   match parse_branch tokens with
-  | Some branch -> branch :: parse_branches tokens
-  | None -> []
+  | Some branch -> parse_branches (branch :: prev) tokens
+  | None -> List.rev prev
 
 and parse_unpack (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
@@ -311,7 +313,7 @@ and parse_unpack (tokens : token Queue.t) : expr =
     match parse_expr tokens with
     | Some (ExprAssign _) | None -> assert false
     | Some expr -> expr in
-  let branches : branch list = parse_block tokens parse_branches in
+  let branches : branch list = parse_block tokens (parse_branches []) in
   ExprUnpack (packed, branches)
 
 and parse_fn (tokens : token Queue.t) : expr =
@@ -319,7 +321,7 @@ and parse_fn (tokens : token Queue.t) : expr =
    | TokenSlash -> ()
    | _ -> assert false);
   let args : string list = parse_args [] tokens in
-  let body : expr list = parse_block tokens parse_exprs in
+  let body : expr list = parse_block tokens (parse_exprs []) in
   let label : string = Printf.sprintf "_f%d_" (get_k ()) in
   Queue.add { label; args; body } context.funcs;
   ExprVar label
@@ -344,10 +346,10 @@ and parse_expr (tokens : token Queue.t) : expr option =
   | TokenSlash -> Some (parse_fn tokens)
   | _ -> None
 
-and parse_exprs (tokens : token Queue.t) : expr list =
+and parse_exprs (prev : expr list) (tokens : token Queue.t) : expr list =
   match parse_expr tokens with
-  | None -> []
-  | Some expr -> expr :: parse_exprs tokens
+  | None -> List.rev prev
+  | Some expr -> parse_exprs (expr :: prev) tokens
 
 let parse_func (tokens : token Queue.t) : func =
   let label : string =
@@ -355,7 +357,7 @@ let parse_func (tokens : token Queue.t) : func =
     | TokenIdent x -> x
     | _ -> assert false in
   let args : string list = parse_args [] tokens in
-  let body : expr list = parse_block tokens parse_exprs in
+  let body : expr list = parse_block tokens (parse_exprs []) in
   {
     label;
     args;
