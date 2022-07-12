@@ -8,6 +8,7 @@ type reg =
   | RegR8
   | RegR9
   | RegR10
+  | RegR10b
   | RegR11
   | RegEax
   | RegRax
@@ -31,6 +32,7 @@ type inst =
   | InstMov of (op * op)
   | InstAdd of (op * op)
   | InstSub of (op * op)
+  | InstAnd of (op * op)
   | InstXor of (op * op)
   | InstInc of op
   | InstDec of op
@@ -38,6 +40,7 @@ type inst =
   | InstCall of op
   | InstJmp of op
   | InstCmp of (op * op)
+  | InstSete of op
   | InstTest of (op * op)
   | InstJne of op
   | InstEnter
@@ -86,6 +89,7 @@ let show_reg : reg -> string =
   | RegR8 -> "r8"
   | RegR9 -> "r9"
   | RegR10 -> "r10"
+  | RegR10b -> "r10b"
   | RegR11 -> "r11"
   | RegEax -> "eax"
   | RegRax -> "rax"
@@ -126,6 +130,7 @@ let show_inst : inst -> string =
   | InstMov (l, r) -> Printf.sprintf "\tmov %s, %s\n" (show_op l) (show_op r)
   | InstAdd (l, r) -> Printf.sprintf "\tadd %s, %s\n" (show_op l) (show_op r)
   | InstSub (l, r) -> Printf.sprintf "\tsub %s, %s\n" (show_op l) (show_op r)
+  | InstAnd (l, r) -> Printf.sprintf "\tand %s, %s\n" (show_op l) (show_op r)
   | InstXor (l, r) -> Printf.sprintf "\txor %s, %s\n" (show_op l) (show_op r)
   | InstInc op -> Printf.sprintf "\tinc %s\n" (show_op op)
   | InstDec op -> Printf.sprintf "\tdec %s\n" (show_op op)
@@ -133,6 +138,7 @@ let show_inst : inst -> string =
   | InstCall op -> Printf.sprintf "\tcall %s\n" (show_op op)
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
   | InstCmp (l, r) -> Printf.sprintf "\tcmp %s, %s\n" (show_op l) (show_op r)
+  | InstSete op -> Printf.sprintf "\tsete %s\n" (show_op op)
   | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
   | InstJne op -> Printf.sprintf "\tjne %s\n" (show_op op)
   | InstEnter ->
@@ -339,6 +345,20 @@ let rec compile_expr : expr -> unit =
         [
           InstPop (OpReg RegR10);
           InstDec (OpReg RegR10);
+          InstPush (OpReg RegR10);
+        ]
+    )
+  | ExprBinOp (BinOpEq, l, r) ->
+    (
+      compile_expr l;
+      compile_expr r;
+      append_insts
+        [
+          InstPop (OpReg RegR11);
+          InstPop (OpReg RegR10);
+          InstCmp (OpReg RegR11, OpReg RegR10);
+          InstSete (OpReg RegR10b);
+          InstAnd (OpReg RegR10, OpImm 1);
           InstPush (OpReg RegR10);
         ]
     )
