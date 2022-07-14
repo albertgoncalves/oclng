@@ -1,0 +1,26 @@
+_entry_ {
+    let x 0
+    switch (= 0 0) {
+        {
+            let y 2
+            y
+        }
+        {
+            let w 4
+            switch 2 {
+                { 3 }
+                {
+                    let y 4
+                    let z 5
+                    y
+                }
+                {
+                    (printf "returned early\n")
+                    return x
+                }
+            }
+        }
+    }
+    (printf "did not return early\n")
+    1
+}

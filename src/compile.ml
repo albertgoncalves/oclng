@@ -15,13 +15,10 @@ type reg =
   | RegRbp
   | RegRsp
 
-type word_size =
-  | WordSizeQWord
-
 type op =
   | OpReg of reg
-  | OpDeref of (reg * word_size * int)
-  | OpTable of (string * reg * int)
+  | OpDeref of (reg * int)
+  | OpTable of (string * reg)
   | OpImm of int
   | OpLabel of string
 
@@ -34,8 +31,6 @@ type inst =
   | InstSub of (op * op)
   | InstAnd of (op * op)
   | InstXor of (op * op)
-  | InstInc of op
-  | InstDec of op
   | InstLabel of string
   | InstCall of op
   | InstJmp of op
@@ -43,34 +38,30 @@ type inst =
   | InstSete of op
   | InstTest of (op * op)
   | InstJne of op
-  | InstEnter
-  | InstLeave
   | InstRet
 
 type context =
   {
     mutable k : int;
-    strings : (string, string) Hashtbl.t;
-    mutable need_stack : bool;
-    mutable n_locals : int;
-    mutable locals : (string, int) Hashtbl.t;
+    mutable stack : int;
+    mutable base : int;
+    mutable vars : (string, int) Hashtbl.t;
     insts : inst Queue.t;
+    strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
-    mutable call_offset : int;
   }
 
 let context : context =
   {
     k = 0;
-    strings = Hashtbl.create 64;
-    need_stack = false;
-    n_locals = 0;
-    locals = Hashtbl.create 8;
+    stack = 0;
+    base = 0;
+    vars = Hashtbl.create 8;
     insts = Queue.create ();
+    strings = Hashtbl.create 64;
     tables = Queue.create ();
     externs = Hashtbl.create 8;
-    call_offset = 0;
   }
 
 let arg_regs : reg list = [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
@@ -96,29 +87,16 @@ let show_reg : reg -> string =
   | RegRbp -> "rbp"
   | RegRsp -> "rsp"
 
-let show_word_size : word_size -> string =
-  function
-  | WordSizeQWord -> "qword"
-
 let show_op : op -> string =
   function
   | OpReg reg -> show_reg reg
-  | OpDeref (reg, word_size, 0) ->
-    Printf.sprintf "%s [%s]" (show_word_size word_size) (show_reg reg)
-  | OpDeref (reg, word_size, offset) when offset < 0 ->
-    Printf.sprintf
-      "%s [%s - %d]"
-      (show_word_size word_size)
-      (show_reg reg)
-      (-offset)
-  | OpDeref (reg, word_size, offset) ->
-    Printf.sprintf
-      "%s [%s + %d]"
-      (show_word_size word_size)
-      (show_reg reg)
-      offset
-  | OpTable (label, reg, scale) ->
-    Printf.sprintf "[%s + (%s * %d)]" label (show_reg reg) scale
+  | OpDeref (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
+  | OpDeref (reg, offset) when offset < 0 ->
+    Printf.sprintf "qword [%s - %d]" (show_reg reg) (offset * -8)
+  | OpDeref (reg, offset) ->
+    Printf.sprintf "qword [%s + %d]" (show_reg reg) (offset * 8)
+  | OpTable (label, reg) ->
+    Printf.sprintf "[%s + (%s * 8)]" label (show_reg reg)
   | OpImm x -> string_of_int x
   | OpLabel str -> str
 
@@ -126,14 +104,13 @@ let show_inst : inst -> string =
   function
   | InstPush op -> Printf.sprintf "\tpush %s\n" (show_op op)
   | InstPop op -> Printf.sprintf "\tpop %s\n" (show_op op)
-  | InstDrop n -> Printf.sprintf "\tadd rsp, %d\n" n
+  | InstDrop 0 -> ""
+  | InstDrop n -> Printf.sprintf "\tadd rsp, %d\n" (n * 8)
   | InstMov (l, r) -> Printf.sprintf "\tmov %s, %s\n" (show_op l) (show_op r)
   | InstAdd (l, r) -> Printf.sprintf "\tadd %s, %s\n" (show_op l) (show_op r)
   | InstSub (l, r) -> Printf.sprintf "\tsub %s, %s\n" (show_op l) (show_op r)
   | InstAnd (l, r) -> Printf.sprintf "\tand %s, %s\n" (show_op l) (show_op r)
   | InstXor (l, r) -> Printf.sprintf "\txor %s, %s\n" (show_op l) (show_op r)
-  | InstInc op -> Printf.sprintf "\tinc %s\n" (show_op op)
-  | InstDec op -> Printf.sprintf "\tdec %s\n" (show_op op)
   | InstLabel label -> Printf.sprintf "%s:\n" label
   | InstCall op -> Printf.sprintf "\tcall %s\n" (show_op op)
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
@@ -141,11 +118,17 @@ let show_inst : inst -> string =
   | InstSete op -> Printf.sprintf "\tsete %s\n" (show_op op)
   | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
   | InstJne op -> Printf.sprintf "\tjne %s\n" (show_op op)
-  | InstEnter ->
-    "\tpush rbp\n\
-     \tmov rbp, rsp\n"
-  | InstLeave -> "\tleave\n"
   | InstRet -> "\tret\n"
+
+let string_label : int -> string = Printf.sprintf "_s%d_"
+
+let append_inst (inst : inst) : unit =
+  Queue.add inst context.insts
+
+let append_insts : inst list -> unit = List.iter append_inst
+
+let get_var (n : int) : op =
+  OpDeref (RegRsp, context.stack - n)
 
 let compile_string (str : string) (label : string) : string =
   Printf.sprintf "\t%s db %s,0\n" label (show_string str)
@@ -153,432 +136,226 @@ let compile_string (str : string) (label : string) : string =
 let compile_table ((table, branches) : (string * string list)) : string =
   Printf.sprintf "\t%s dq %s\n" table (String.concat "," branches)
 
-let string_label : int -> string = Printf.sprintf "_s%d_"
+let append_var (var : string) : unit =
+  assert (not (Hashtbl.mem context.vars var));
+  Hashtbl.add context.vars var context.stack
 
-let append_local (var : string) : unit =
-  assert (not (Hashtbl.mem context.locals var));
-  Hashtbl.add context.locals var (context.n_locals + context.call_offset);
-  context.n_locals <- context.n_locals + 1
-
-let append_inst (inst : inst) : unit =
-  Queue.add inst context.insts
-
-let append_insts : inst list -> unit = List.iter append_inst
-
-let is_assign : expr -> bool =
-  function
-  | ExprAssign _-> true
-  | _ -> false
-
-let rec returns : expr list -> bool =
-  function
-  | [] -> assert false
-  | [ExprIfThen (_, exprs_then, exprs_else)] ->
-    if returns exprs_then then (
-      assert (returns exprs_else);
-      true
-    ) else (
-      assert (not (returns exprs_else));
-      false
-    )
-  | [ExprUnpack (_, [(_, exprs)])] -> returns exprs
-  | [ExprUnpack (_, branches)] -> returns_branches branches
-  | [ExprCall (true, _, _)] -> true
-  | [ExprRet _] -> true
-  | [_] -> false
-  | _ :: exprs -> returns exprs
-
-and returns_branches : branch list -> bool =
-  function
-  | (_, exprs) :: branches ->
-    if returns exprs then (
-      assert (List.for_all (fun x -> returns (snd x)) branches);
-      true
-    ) else (
-      assert (List.for_all (fun x -> not (returns (snd x))) branches);
-      false
-    )
-  | [] -> assert false
-
-let rec compile_pack_args (offset : int) : string list -> unit =
+let rec compile_func_args (regs : reg list) : string list -> unit =
   function
   | [] -> ()
-  | str :: strs ->
-    (
-      append_inst (InstPush (OpDeref (RegR11, WordSizeQWord, 8 * offset)));
-      append_local str;
-      compile_pack_args (offset + 1) strs
-    )
-
-let get_local (n : int) : op =
-  let offset : int = -((n + 1) * 8) in
-  OpDeref (RegRbp, WordSizeQWord, offset)
-
-let reset_locals (n_locals : int) (locals : (string, int) Hashtbl.t) : unit =
-  if context.n_locals <> n_locals then (
-    assert (n_locals < context.n_locals);
-    context.n_locals <- n_locals;
-    context.locals <- locals
-  )
+  | arg :: args ->
+    (match regs with
+     | [] -> assert false
+     | reg :: regs ->
+       (
+         append_inst (InstPush (OpReg reg));
+         context.stack <- context.stack + 1;
+         append_var arg;
+         compile_func_args regs args
+       ))
 
 let rec compile_expr : expr -> unit =
   function
-  | ExprDrop expr ->
+  | ExprInt n ->
     (
-      compile_expr expr;
-      append_inst (InstDrop 8)
-    )
-  | ExprRet expr ->
-    (
-      compile_expr expr;
-      append_inst (InstPop (OpReg RegRax));
-      if context.need_stack then (
-        append_inst InstLeave;
-      );
-      append_inst InstRet
-    )
-  | ExprCall (tail, call, args) ->
-    (
-      compile_call_args arg_regs args;
-      if tail && context.need_stack then (
-        append_inst InstLeave
-      );
-      (match call with
-       | CallIntrin IntrinPrintf ->
-         (
-           Hashtbl.replace context.externs "printf" ();
-           append_insts
-             [
-               InstXor (OpReg RegEax, OpReg RegEax);
-               let label : op = OpLabel "printf" in
-               if tail then
-                 InstJmp label
-               else
-                 InstCall label
-             ]
-         )
-       | CallIntrin IntrinPack ->
-         (
-           let label : string =
-             match List.length args with
-             | 1 -> "pack_1"
-             | 2 -> "pack_2"
-             | 3 -> "pack_3"
-             | 4 -> "pack_4"
-             | 5 -> "pack_5"
-             | 6 -> "pack_6"
-             | _ -> assert false in
-           Hashtbl.replace context.externs label ();
-           append_inst
-             (
-               let label : op = OpLabel label in
-               if tail then
-                 InstJmp label
-               else
-                 InstCall label
-             )
-         )
-       | CallLabel label ->
-         let label : op =
-           match Hashtbl.find_opt context.locals label with
-           | None -> OpLabel label
-           | Some n -> get_local n in
-         append_inst
-           (
-             if tail then
-               InstJmp label
-             else
-               InstCall label
-           )
-      );
-      if not tail then (
-        append_inst (InstPush (OpReg RegRax))
-      )
+      append_inst (InstPush (OpImm n));
+      context.stack <- context.stack + 1
     )
   | ExprStr str ->
-    let label : string =
-      match Hashtbl.find_opt context.strings str with
-      | None ->
-        (
-          let label : string = string_label (get_k ()) in
-          Hashtbl.add context.strings str label;
-          label
-        )
-      | Some label -> label in
-    append_inst (InstPush (OpLabel label))
-  | ExprInt x -> append_inst (InstPush (OpImm x))
+    (
+      let label : string =
+        match Hashtbl.find_opt context.strings str with
+        | None ->
+          (
+            let label : string = string_label (get_k ()) in
+            Hashtbl.add context.strings str label;
+            label
+          )
+        | Some label -> label in
+      append_inst (InstPush (OpLabel label));
+      context.stack <- context.stack + 1
+    )
   | ExprVar var ->
-    (match Hashtbl.find_opt context.locals var with
-     | Some n -> append_inst (InstPush (get_local n))
-     | None -> append_inst (InstPush (OpLabel var)))
-  | ExprAssign (var, expr) ->
     (
-      compile_expr expr;
-      append_local var
+      append_inst
+        (match Hashtbl.find_opt context.vars var with
+         | Some n -> InstPush (get_var n)
+         | None -> InstPush (OpLabel var));
+      context.stack <- context.stack + 1
     )
-  | ExprInject (pointer, n, replacement) ->
-    (
-      compile_expr pointer;
-      compile_expr replacement;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          InstMov ((OpDeref (RegR10, WordSizeQWord, n * 8)), (OpReg RegR11));
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprBinOp (BinOpAdd, expr, ExprInt 1)
-  | ExprBinOp (BinOpAdd, ExprInt 1, expr) ->
-    (
-      compile_expr expr;
-      append_insts
-        [
-          InstPop (OpReg RegR10);
-          InstInc (OpReg RegR10);
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprBinOp (BinOpSub, expr, ExprInt 1) ->
-    (
-      compile_expr expr;
-      append_insts
-        [
-          InstPop (OpReg RegR10);
-          InstDec (OpReg RegR10);
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprBinOp (BinOpEq, l, r) ->
-    (
-      compile_expr l;
-      compile_expr r;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          InstCmp (OpReg RegR11, OpReg RegR10);
-          InstSete (OpReg RegR10b);
-          InstAnd (OpReg RegR10, OpImm 1);
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprBinOp (bin_op, l, r) ->
-    (
-      compile_expr l;
-      compile_expr r;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          (match bin_op with
-           | BinOpAdd -> InstAdd (OpReg RegR10, OpReg RegR11)
-           | BinOpSub -> InstSub (OpReg RegR10, OpReg RegR11)
-           | _ -> assert false);
-          InstPush (OpReg RegR10);
-        ]
-    )
-  | ExprIf (condition, exprs_then) ->
-    (
-      let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
-      let n_locals : int = context.n_locals in
-      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
-      compile_if_condition label_else condition;
-      List.iter compile_expr exprs_then;
-      reset_locals n_locals locals;
-      append_inst (InstLabel label_else);
-    )
-  | ExprIfThen (condition, exprs_then, exprs_else) ->
-    (
-      let returns_then : bool = returns exprs_then in
-      let returns_else : bool = returns exprs_else in
-      let label_else : string = Printf.sprintf "_else%d_" (get_k ()) in
-      let n_locals : int = context.n_locals in
-      let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
-      compile_if_condition label_else condition;
-      List.iter compile_expr exprs_then;
-      if returns_then && returns_else then (
-        reset_locals n_locals locals;
-        append_inst (InstLabel label_else);
-        List.iter compile_expr exprs_else;
-        reset_locals n_locals locals
-      ) else (
-        let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
-        append_inst (InstJmp (OpLabel label_end));
-        reset_locals n_locals locals;
-        append_inst (InstLabel label_else);
-        List.iter compile_expr exprs_else;
-        reset_locals n_locals locals;
-        append_inst (InstLabel label_end)
-      )
-    )
-  | ExprUnpack (packed, branches) ->
-    (
-      let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
-      let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
-      compile_expr packed;
-      append_insts
-        [
-          InstPop (OpReg RegR11);
-          InstMov (OpReg RegR10, OpDeref (RegR11, WordSizeQWord, 0));
-          InstJmp (OpTable (label_table, RegR10, 8));
-        ];
-      let label_branches : string list =
-        List.map (compile_branch label_end) branches in
-      if not (returns_branches branches) then (
-        append_insts
-          [
-            InstLabel label_end;
-            InstPush (OpReg RegRax);
-          ]
-      );
-      Queue.add (label_table, label_branches) context.tables
-    )
+  | ExprCall (label, args) -> compile_call label args
+  | ExprSwitch (expr, branches) -> compile_switch expr branches
 
 and compile_call_args (regs : reg list) : expr list -> unit =
   function
   | [] -> ()
   | expr :: exprs ->
-    (
-      assert (not (is_assign expr));
-      match regs with
-      | [] -> assert false
-      | reg :: regs ->
-        (
-          compile_expr expr;
-          context.call_offset <- context.call_offset + 1;
-          compile_call_args regs exprs;
-          append_inst (InstPop (OpReg reg));
-          context.call_offset <- context.call_offset - 1
-        )
-    )
+    (match regs with
+     | [] -> assert false
+     | reg :: regs ->
+       (
+         compile_expr expr;
+         compile_call_args regs exprs;
+         append_inst (InstPop (OpReg reg));
+         context.stack <- context.stack - 1;
+       ))
 
-and compile_if_condition (label_else : string) : expr -> unit =
-  function
-  | ExprBinOp (BinOpEq, expr, ExprInt 0)
-  | ExprBinOp (BinOpEq, ExprInt 0, expr) ->
+and compile_call (label : string) (args : expr list) : unit =
+  match label with
+  | "=" | "+" | "-" ->
+    (match args with
+     | [l; r] ->
+       (
+         compile_expr l;
+         compile_expr r;
+         append_insts
+           [
+             InstPop (OpReg RegR11);
+             InstPop (OpReg RegR10);
+           ];
+         append_insts
+           (match label with
+            | "=" ->
+              [
+                InstCmp (OpReg RegR10, OpReg RegR11);
+                InstSete (OpReg RegR10b);
+                InstAnd (OpReg RegR10, OpImm 1);
+              ]
+            | "+" -> [InstAdd (OpReg RegR10, OpReg RegR11)]
+            | "-" -> [InstSub (OpReg RegR10, OpReg RegR11)]
+            | _ -> assert false);
+         append_inst (InstPush (OpReg RegR10));
+         context.stack <- context.stack - 1
+       )
+     | _ -> assert false)
+  | "printf" ->
     (
-      compile_expr expr;
+      compile_call_args arg_regs args;
       append_insts
         [
-          InstPop (OpReg RegR10);
-          InstTest (OpReg RegR10, OpReg RegR10);
-          InstJne (OpLabel label_else);
-        ]
+          InstXor (OpReg RegEax, OpReg RegEax);
+          InstCall (OpLabel "printf");
+          InstPush (OpReg RegRax);
+        ];
+      context.stack <- context.stack + 1;
+      Hashtbl.replace context.externs "printf" ();
     )
-  | ExprBinOp (BinOpEq, l, r) ->
+  | _ ->
     (
-      compile_expr l;
-      compile_expr r;
+      compile_call_args arg_regs args;
       append_insts
         [
-          InstPop (OpReg RegR11);
-          InstPop (OpReg RegR10);
-          InstCmp (OpReg RegR10, OpReg RegR11);
-          InstJne (OpLabel label_else);
-        ]
+          InstCall
+            (match Hashtbl.find_opt context.vars label with
+             | None -> OpLabel label
+             | Some n -> get_var n);
+          InstPush (OpReg RegRax);
+        ];
+      context.stack <- context.stack + 1;
     )
-  | _ -> assert false
 
-and compile_branch (label_end : string) ((args, exprs) : branch) : string =
+and compile_branch (label_end : string) (stmts : stmt list) : (string * bool) =
   let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
-  let n_locals : int = context.n_locals in
-  let locals : (string, int) Hashtbl.t = Hashtbl.copy context.locals in
-  compile_pack_args 1 args;
-  let returns_exprs : bool = returns exprs in
-  List.iter compile_expr exprs;
-  if not returns_exprs then (
-    append_inst (InstPop (OpReg RegRax))
-  );
-  let new_n_locals : int = context.n_locals in
-  if new_n_locals <> n_locals then (
-    assert (n_locals < new_n_locals);
-    if not returns_exprs then (
-      append_inst (InstDrop (8 * (new_n_locals - n_locals)))
+  let base : int = context.base in
+  context.base <- context.stack;
+  let vars : (string, int) Hashtbl.t = Hashtbl.copy context.vars in
+  let returned : bool = compile_stmts stmts in
+  if not returned then (
+    append_inst (InstPop (OpReg RegRax));
+    context.stack <- context.stack - 1;
+    let garbage : int = context.stack - context.base in
+    assert (0 <= garbage);
+    if 0 < garbage then (
+      append_inst (InstDrop garbage);
     );
-    context.n_locals <- n_locals;
-    context.locals <- locals
-  );
-  if not returns_exprs then (
     append_inst (InstJmp (OpLabel label_end))
   );
-  label_branch
+  context.stack <- context.base;
+  context.base <- base;
+  context.vars <- vars;
+  (label_branch, returned)
 
-let rec need_stack : expr list -> bool =
+and compile_switch (expr : expr) (branches : stmt list list) : unit =
+  let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
+  let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
+  compile_expr expr;
+  append_insts
+    [
+      InstPop (OpReg RegR10);
+      InstJmp (OpTable (label_table, RegR10));
+    ];
+  context.stack <- context.stack - 1;
+  let (label_branches, returns) : (string list * bool list) =
+    List.split (List.map (compile_branch label_end) branches) in
+  if not (List.for_all (fun x -> x) returns) then (
+    append_insts
+      [
+        InstLabel label_end;
+        InstPush (OpReg RegRax);
+      ];
+    context.stack <- context.stack + 1;
+  );
+  Queue.add (label_table, label_branches) context.tables
+
+and compile_return (expr : expr) : unit =
+  compile_expr expr;
+  append_inst (InstPop (OpReg RegRax));
+  context.stack <- context.stack - 1;
+  if context.stack <> 0 then (
+    append_inst (InstDrop context.stack)
+  );
+  append_inst InstRet
+
+and compile_stmt : stmt -> unit =
+  function
+  | StmtHold expr -> compile_expr expr
+  | StmtDrop expr ->
+    (
+      compile_expr expr;
+      append_inst (InstDrop 1);
+      context.stack <- context.stack - 1
+    )
+  | StmtLet (var, expr) ->
+    (
+      compile_expr expr;
+      append_var var;
+    )
+  | StmtReturn (ExprCall ("=", _) as expr)
+  | StmtReturn (ExprCall ("+", _) as expr)
+  | StmtReturn (ExprCall ("-", _) as expr) -> compile_return expr
+  | StmtReturn (ExprSwitch (expr, branches)) -> compile_switch expr branches
+  | StmtReturn (ExprCall (label, args)) ->
+    (
+      compile_call_args arg_regs args;
+      if context.stack <> 0 then (
+        append_inst (InstDrop context.stack)
+      );
+      append_inst (InstJmp (OpLabel label))
+    )
+  | StmtReturn expr -> compile_return expr
+
+and compile_stmts : stmt list -> bool =
   function
   | [] -> false
-  | (ExprAssign _) :: _
-  | (ExprUnpack _) :: _ -> true
-  | (ExprIfThen (_, exprs_then, exprs_else)) :: exprs ->
-    (need_stack exprs_then) || (need_stack exprs_else) || (need_stack exprs)
-  | _ :: exprs -> need_stack exprs
-
-let rec compile_func_args (regs : reg list) : string list -> unit =
-  function
-  | [] -> ()
-  | str :: strs ->
+  | [StmtReturn _ as stmt] ->
     (
-      match regs with
-      | [] -> assert false
-      | reg :: regs ->
-        (
-          append_inst (InstPush (OpReg reg));
-          append_local str;
-          compile_func_args regs strs
-        )
+      compile_stmt stmt;
+      true
+    )
+  | StmtReturn _ :: _ -> assert false
+  | stmt :: rest ->
+    (
+      compile_stmt stmt;
+      compile_stmts rest
     )
 
-let rec return_last (prev : expr list) : expr list -> expr list =
-  function
-  | ExprRet _ :: _
-  | ExprDrop _ :: _
-  | ExprCall (true, _, _) :: _
-  | [ExprIf _]
-  | [ExprAssign _] -> assert false
-  | [] -> List.rev prev
-  | [ExprIfThen (condition, exprs_then, exprs_else)] ->
-    return_last
-      (
-        ExprIfThen
-          (
-            condition,
-            return_last [] exprs_then,
-            return_last [] exprs_else
-          ) :: prev
-      )
-      []
-  | [ExprUnpack (packed, branches)] ->
-    return_last (
-      ExprUnpack
-        (
-          packed,
-          List.map (fun (args, exprs) -> (args, return_last [] exprs)) branches
-        )
-      :: prev) []
-  | [ExprCall (false, call, args)] ->
-    return_last (ExprCall (true, call, args) :: prev) []
-  | [expr] -> return_last (ExprRet expr :: prev) []
-  | (ExprIf _ as expr) :: exprs
-  | (ExprAssign _ as expr) :: exprs -> return_last (expr :: prev) exprs
-  | expr :: exprs -> return_last (ExprDrop expr :: prev) exprs
-
 let compile_func (func : func) : unit =
-  context.need_stack <- (List.length func.args <> 0) || (need_stack func.body);
-  context.n_locals <- 0;
-  Hashtbl.clear context.locals;
+  context.stack <- 0;
+  Hashtbl.clear context.vars;
   append_inst (InstLabel func.label);
-  if context.need_stack then (
-    append_inst InstEnter
-  );
   compile_func_args arg_regs func.args;
-  assert ((List.length func.body) <> 0);
-  let body : expr list = return_last [] func.body in
-  Printf.fprintf
-    stderr
-    "%s\n"
-    (show_func { label = func.label; args = func.args; body });
-  List.iter compile_expr body
+  assert (compile_stmts func.body)
 
 let rec opt_push_pop (prev : inst list) : inst list -> inst list =
   function
@@ -587,7 +364,7 @@ let rec opt_push_pop (prev : inst list) : inst list -> inst list =
     opt_push_pop prev insts
   | InstPush op_push :: InstPop op_pop :: insts ->
     opt_push_pop (InstMov (op_pop, op_push) :: prev) insts
-  | InstPush _ :: InstDrop _ :: insts -> opt_push_pop prev insts
+  | InstPush _ :: InstDrop 1 :: insts -> opt_push_pop prev insts
   | inst :: insts -> opt_push_pop (inst :: prev) insts
 
 let rec opt_jump (prev : inst list) : inst list -> inst list =
@@ -598,6 +375,7 @@ let rec opt_jump (prev : inst list) : inst list -> inst list =
   | inst :: insts -> opt_jump (inst :: prev) insts
 
 let compile (funcs : func list) : Buffer.t =
+  List.iter (fun f -> Printf.fprintf stderr "%s\n" (show_func f)) funcs;
   List.iter compile_func funcs;
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
@@ -611,11 +389,16 @@ let compile (funcs : func list) : Buffer.t =
   |> opt_push_pop []
   |> opt_jump []
   |> List.iter (fun inst -> Buffer.add_string buffer (show_inst inst));
-  Buffer.add_string buffer "section '.rodata'\n";
-  Hashtbl.iter
-    (fun k v -> Buffer.add_string buffer (compile_string k v))
-    context.strings;
-  Queue.iter
-    (fun t -> Buffer.add_string buffer (compile_table t))
-    context.tables;
+  if
+    (Hashtbl.length context.strings <> 0) ||
+    (Queue.length context.tables <> 0)
+  then (
+    Buffer.add_string buffer "section '.rodata'\n";
+    Hashtbl.iter
+      (fun k v -> Buffer.add_string buffer (compile_string k v))
+      context.strings;
+    Queue.iter
+      (fun t -> Buffer.add_string buffer (compile_table t))
+      context.tables
+  );
   buffer

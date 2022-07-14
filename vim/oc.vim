@@ -19,15 +19,9 @@ hi def link ocSpecial SpecialChar
 syn keyword Statement
     \ return
     \ let
-    \ inject
-    \ if
-    \ else
-    \ unpack
-syn keyword Keyword
-    \ fflush
-    \ printf
-    \ pack
+    \ switch
 syn keyword Function
     \ _entry_
+    \ printf
 
 let b:current_syntax = "oc"

@@ -6,15 +6,15 @@ type token =
   | TokenLBrace
   | TokenRBrace
   | TokenSlash
+
+  | TokenReturn
+  | TokenLet
+  | TokenSwitch
+
   | TokenEq
   | TokenAdd
   | TokenSub
-  | TokenLet
-  | TokenInject
-  | TokenIf
-  | TokenElse
-  | TokenRet
-  | TokenUnpack
+
   | TokenInt of int
   | TokenIdent of string
   | TokenStr of string
@@ -26,15 +26,15 @@ let show_token : token -> string =
   | TokenLBrace -> "{"
   | TokenRBrace -> "}"
   | TokenSlash -> "\\"
+
+  | TokenReturn -> "return"
+  | TokenLet -> "let"
+  | TokenSwitch -> "switch"
+
   | TokenEq -> "="
   | TokenAdd -> "+"
   | TokenSub -> "-"
-  | TokenLet -> "let"
-  | TokenInject -> "inject"
-  | TokenIf -> "if"
-  | TokenElse -> "else"
-  | TokenRet -> "return"
-  | TokenUnpack -> "unpack"
+
   | TokenInt x -> string_of_int x
   | TokenIdent x -> x
   | TokenStr x -> Printf.sprintf "\"%s\"" x
@@ -73,15 +73,14 @@ let into_token : string -> token =
   | "{" -> TokenLBrace
   | "}" -> TokenRBrace
   | "\\" -> TokenSlash
+
+  | "return" -> TokenReturn
+  | "let" -> TokenLet
+  | "switch" -> TokenSwitch
+
   | "=" -> TokenEq
   | "+" -> TokenAdd
   | "-" -> TokenSub
-  | "let" -> TokenLet
-  | "inject" -> TokenInject
-  | "if" -> TokenIf
-  | "else" -> TokenElse
-  | "return" -> TokenRet
-  | "unpack" -> TokenUnpack
   | cs ->
     (
       assert ((String.length cs) <> 0);
@@ -179,6 +178,19 @@ let tokenize (source : bytes) : token Queue.t =
   |> Seq.map into_token
   |> Queue.of_seq
 
+let rec return_last (prev : stmt list) : stmt list -> stmt list =
+  function
+  | [] -> List.rev prev
+  | [StmtHold (ExprSwitch (expr, branches))] ->
+    return_last
+      (
+        StmtReturn (ExprSwitch (expr, List.map (return_last []) branches))
+        :: prev
+      )
+      []
+  | [StmtHold expr] -> return_last (StmtReturn expr :: prev) []
+  | stmt :: stmts -> return_last (stmt :: prev) stmts
+
 let rec parse_args
     (prev : string list)
     (tokens : token Queue.t) : string list =
@@ -197,136 +209,7 @@ let parse_block (tokens : token Queue.t) (f : token Queue.t -> 'a) : 'a =
      | _ -> assert false)
   | _ -> assert false
 
-let rec parse_call (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenLParen -> ()
-   | _ -> assert false);
-  let expr : expr =
-    match Queue.pop tokens with
-    | TokenIdent x ->
-      let args : expr list = parse_exprs [] tokens in
-      let call : call =
-        match x with
-        | "printf" -> CallIntrin (IntrinPrintf)
-        | "pack" -> CallIntrin (IntrinPack)
-        | _ -> CallLabel x in
-      ExprCall (false, call, args)
-    | TokenEq ->
-      (match parse_exprs [] tokens with
-       | [l; r] -> ExprBinOp (BinOpEq, l, r)
-       | _ -> assert false)
-    | TokenAdd ->
-      (match parse_exprs [] tokens with
-       | [l; r] -> ExprBinOp (BinOpAdd, l, r)
-       | _ -> assert false)
-    | TokenSub ->
-      (match parse_exprs [] tokens with
-       | [l; r] -> ExprBinOp (BinOpSub, l, r)
-       | _ -> assert false)
-    | _ -> assert false in
-  (match Queue.pop tokens with
-   | TokenRParen -> ()
-   | _ -> assert false);
-  expr
-
-and parse_let (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenLet -> ()
-   | _ -> assert false);
-  let var : string =
-    match Queue.pop tokens with
-    | TokenIdent x -> x
-    | _ -> assert false in
-  let expr : expr =
-    match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
-  ExprAssign (var, expr)
-
-and parse_inject (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenInject -> ()
-   | _ -> assert false);
-  let pointer : expr =
-    match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
-  let n : int =
-    match Queue.pop tokens with
-    | TokenInt n -> n
-    | _ -> assert false in
-  let replacement : expr =
-    match parse_expr tokens with
-    | Some expr -> expr
-    | None -> assert false in
-  ExprInject (pointer, n, replacement)
-
-and parse_if (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenIf -> ()
-   | _ -> assert false);
-  let condition : expr =
-    match parse_expr tokens with
-    | Some (ExprAssign _) | None -> assert false
-    | Some expr -> expr in
-  let exprs_then : expr list = parse_block tokens (parse_exprs []) in
-  match Queue.peek tokens with
-  | TokenElse ->
-    let _ : token = Queue.pop tokens in
-    let exprs_else : expr list =
-      match Queue.peek tokens with
-      | TokenIf -> [parse_if tokens]
-      | _ -> parse_block tokens (parse_exprs []) in
-    ExprIfThen (condition, exprs_then, exprs_else)
-  | _ -> ExprIf (condition, exprs_then)
-
-and parse_return (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenRet -> ()
-   | _ -> assert false);
-  let expr : expr =
-    match parse_expr tokens with
-    | Some (ExprRet _) | Some (ExprAssign _) | None -> assert false
-    | Some expr -> expr in
-  ExprRet expr
-
-and parse_branch (tokens : token Queue.t) : branch option =
-  let args : string list = parse_args [] tokens in
-  match Queue.peek tokens with
-  | TokenLBrace ->
-    let exprs : expr list = parse_block tokens (parse_exprs []) in
-    Some (args, exprs)
-  | _ -> None
-
-and parse_branches
-    (prev : branch list)
-    (tokens : token Queue.t) : branch list =
-  match parse_branch tokens with
-  | Some branch -> parse_branches (branch :: prev) tokens
-  | None -> List.rev prev
-
-and parse_unpack (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenUnpack -> ()
-   | _ -> assert false);
-  let packed : expr =
-    match parse_expr tokens with
-    | Some (ExprAssign _) | None -> assert false
-    | Some expr -> expr in
-  let branches : branch list = parse_block tokens (parse_branches []) in
-  ExprUnpack (packed, branches)
-
-and parse_fn (tokens : token Queue.t) : expr =
-  (match Queue.pop tokens with
-   | TokenSlash -> ()
-   | _ -> assert false);
-  let args : string list = parse_args [] tokens in
-  let body : expr list = parse_block tokens (parse_exprs []) in
-  let label : string = Printf.sprintf "_f%d_" (get_k ()) in
-  Queue.add { label; args; body } context.funcs;
-  ExprVar label
-
-and parse_expr (tokens : token Queue.t) : expr option =
+let rec parse_expr (tokens : token Queue.t) : expr option =
   match Queue.peek tokens with
   | TokenInt x ->
     let _ : token = Queue.pop tokens in
@@ -338,11 +221,7 @@ and parse_expr (tokens : token Queue.t) : expr option =
     let _ : token = Queue.pop tokens in
     Some (ExprStr x)
   | TokenLParen -> Some (parse_call tokens)
-  | TokenLet -> Some (parse_let tokens)
-  | TokenInject -> Some (parse_inject tokens)
-  | TokenIf -> Some (parse_if tokens)
-  | TokenRet -> Some (parse_return tokens)
-  | TokenUnpack -> Some (parse_unpack tokens)
+  | TokenSwitch -> Some (parse_switch tokens)
   | TokenSlash -> Some (parse_fn tokens)
   | _ -> None
 
@@ -351,13 +230,102 @@ and parse_exprs (prev : expr list) (tokens : token Queue.t) : expr list =
   | None -> List.rev prev
   | Some expr -> parse_exprs (expr :: prev) tokens
 
+and parse_call (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenLParen -> ()
+   | _ -> assert false);
+  let label : string =
+    match Queue.pop tokens with
+    | TokenEq -> "="
+    | TokenAdd -> "+"
+    | TokenSub ->  "-"
+    | TokenIdent label -> label
+    | _ -> assert false in
+  let args : expr list = parse_exprs [] tokens in
+  (match Queue.pop tokens with
+   | TokenRParen -> ()
+   | _ -> assert false);
+  ExprCall (label, args)
+
+and parse_branch
+    (prev : stmt list list)
+    (tokens : token Queue.t) : stmt list list =
+  match Queue.peek tokens with
+  | TokenLBrace ->
+    parse_branch (parse_block tokens (parse_stmts []) :: prev) tokens
+  | TokenRBrace ->
+    let _ : token = Queue.pop tokens in
+    List.rev prev
+  | _ -> assert false
+
+and parse_switch (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenSwitch -> ()
+   | _ -> assert false);
+  let expr : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  (match Queue.pop tokens with
+   | TokenLBrace -> ()
+   | _ -> assert false);
+  ExprSwitch (expr, parse_branch [] tokens)
+
+and parse_fn (tokens : token Queue.t) : expr =
+  (match Queue.pop tokens with
+   | TokenSlash -> ()
+   | _ -> assert false);
+  let args : string list = parse_args [] tokens in
+  let body : stmt list =
+    return_last [] (parse_block tokens (parse_stmts [])) in
+  let label : string = Printf.sprintf "_f%d_" (get_k ()) in
+  Queue.add { label; args; body } context.funcs;
+  ExprVar label
+
+and parse_stmt (tokens : token Queue.t) : stmt option =
+  match Queue.peek tokens with
+  | TokenReturn ->
+    let _ : token = Queue.pop tokens in
+    (match parse_expr tokens with
+     | Some expr -> Some (StmtReturn expr)
+     | _ -> assert false)
+  | TokenLet -> Some (parse_let tokens)
+  | _ ->
+    match parse_expr tokens with
+    | Some expr -> Some (StmtDrop expr)
+    | _ -> None
+
+and parse_stmts (prev : stmt list) (tokens : token Queue.t) : stmt list =
+  match parse_stmt tokens with
+  | None ->
+    (match prev with
+     | StmtDrop expr :: rest -> List.rev (StmtHold expr :: rest)
+     | (StmtReturn _ :: _) as stmts -> List.rev stmts
+     | _ -> assert false)
+  | Some stmt -> parse_stmts (stmt :: prev) tokens
+
+and parse_let (tokens : token Queue.t) : stmt =
+  (match Queue.pop tokens with
+   | TokenLet -> ()
+   | _ -> assert false);
+  let var : string =
+    match Queue.pop tokens with
+    | TokenIdent x -> x
+    | _ -> assert false in
+  let expr : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
+  StmtLet (var, expr)
+
 let parse_func (tokens : token Queue.t) : func =
   let label : string =
     match Queue.pop tokens with
     | TokenIdent x -> x
     | _ -> assert false in
   let args : string list = parse_args [] tokens in
-  let body : expr list = parse_block tokens (parse_exprs []) in
+  let body : stmt list =
+    return_last [] (parse_block tokens (parse_stmts [])) in
   {
     label;
     args;

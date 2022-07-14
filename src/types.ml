@@ -1,37 +1,21 @@
-type bin_op =
-  | BinOpEq
-  | BinOpAdd
-  | BinOpSub
-
-type intrin =
-  | IntrinPrintf
-  | IntrinPack
-
-type call =
-  | CallIntrin of intrin
-  | CallLabel of string
-
-type branch = (string list) * (expr list)
+type stmt =
+  | StmtDrop of expr
+  | StmtHold of expr
+  | StmtReturn of expr
+  | StmtLet of (string * expr)
 
 and expr =
-  | ExprDrop of expr
-  | ExprRet of expr
   | ExprInt of int
   | ExprStr of string
   | ExprVar of string
-  | ExprAssign of (string * expr)
-  | ExprInject of (expr * int * expr)
-  | ExprIf of (expr * expr list)
-  | ExprIfThen of (expr * expr list * expr list)
-  | ExprBinOp of (bin_op * expr * expr)
-  | ExprCall of (bool * call * expr list)
-  | ExprUnpack of (expr * branch list)
+  | ExprCall of (string * expr list)
+  | ExprSwitch of (expr * stmt list list)
 
 type func =
   {
     label : string;
     args : string list;
-    body : expr list;
+    body : stmt list;
   }
 
 let encode (chars : char list) : string =
@@ -55,76 +39,36 @@ let encode (chars : char list) : string =
 let show_string (str : string) : string =
   encode (List.of_seq (String.to_seq str))
 
-let show_bin_op : bin_op -> string =
-  function
-  | BinOpEq -> "="
-  | BinOpAdd -> "+"
-  | BinOpSub -> "-"
-
-let show_call : call -> string =
-  function
-  | CallIntrin IntrinPrintf -> "printf"
-  | CallIntrin IntrinPack -> "pack"
-  | CallLabel label -> label
-
 let rec show_expr : expr -> string =
   function
-  | ExprDrop expr -> Printf.sprintf "drop %s" (show_expr expr)
-  | ExprRet expr -> Printf.sprintf "return %s" (show_expr expr)
   | ExprInt x -> string_of_int x
   | ExprStr x -> show_string x
   | ExprVar x -> x
-  | ExprAssign (label, expr) ->
-    Printf.sprintf "let %s %s" label (show_expr expr)
-  | ExprInject (pointer, n, replacement) ->
+  | ExprCall (label, []) -> Printf.sprintf "(%s)" label
+  | ExprCall (label, args) -> Printf.sprintf "(%s %s)" label (show_exprs args)
+  | ExprSwitch (packed, branches) ->
     Printf.sprintf
-      "inject %s %d %s"
-      (show_expr pointer)
-      n
-      (show_expr replacement)
-  | ExprIf (condition, exprs) ->
-    Printf.sprintf "if %s { %s }" (show_expr condition) (show_exprs exprs)
-  | ExprIfThen (condition, exprs_then, exprs_else) ->
-    Printf.sprintf
-      "if %s { %s } else { %s }"
-      (show_expr condition)
-      (show_exprs exprs_then)
-      (show_exprs exprs_else)
-  | ExprBinOp (op, l, r) ->
-    Printf.sprintf "(%s %s %s)" (show_bin_op op) (show_expr l) (show_expr r)
-  | ExprCall (tail, call, []) ->
-    Printf.sprintf
-      (
-        if tail then
-          "tail (%s)"
-        else
-          "(%s)"
-      )
-      (show_call call)
-  | ExprCall (tail, call, args) ->
-    Printf.sprintf
-      (
-        if tail then
-          "tail (%s %s)"
-        else
-          "(%s %s)"
-      )
-      (show_call call)
-      (show_exprs args)
-  | ExprUnpack (packed, branches) ->
-    Printf.sprintf
-      "unpack %s { %s }"
+      "branch %s { { %s } }"
       (show_expr packed)
-      (show_branches branches)
+      (
+        String.concat
+          " } { "
+          (
+            List.map
+              (fun s -> String.concat " " (List.map show_stmt s))
+              branches
+          )
+      )
 
 and show_exprs (exprs : expr list) : string =
   String.concat " " (List.map show_expr exprs)
 
-and show_branch ((args, exprs) : branch) : string =
-  Printf.sprintf "%s { %s }" (String.concat " " args) (show_exprs exprs)
-
-and show_branches (branches : branch list) : string =
-  String.concat "; " (List.map show_branch branches)
+and show_stmt : stmt -> string =
+  function
+  | StmtDrop expr -> Printf.sprintf "drop %s" (show_expr expr)
+  | StmtHold expr -> Printf.sprintf "hold %s" (show_expr expr)
+  | StmtReturn expr -> Printf.sprintf "return %s" (show_expr expr)
+  | StmtLet (label, expr) -> Printf.sprintf "let %s %s" label (show_expr expr)
 
 let show_func (func : func) : string =
   Printf.sprintf
@@ -133,4 +77,4 @@ let show_func (func : func) : string =
      }\n"
     func.label
     (String.concat " " func.args)
-    (String.concat "\n    " (List.map show_expr func.body))
+    (String.concat "\n    " (List.map show_stmt func.body))
