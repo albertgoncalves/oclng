@@ -12,7 +12,6 @@ type reg =
   | RegR11
   | RegEax
   | RegRax
-  | RegRbp
   | RegRsp
 
 type op =
@@ -36,8 +35,6 @@ type inst =
   | InstJmp of op
   | InstCmp of (op * op)
   | InstSete of op
-  | InstTest of (op * op)
-  | InstJne of op
   | InstRet
 
 type context =
@@ -85,7 +82,6 @@ let show_reg : reg -> string =
   | RegR11 -> "r11"
   | RegEax -> "eax"
   | RegRax -> "rax"
-  | RegRbp -> "rbp"
   | RegRsp -> "rsp"
 
 let show_op : op -> string =
@@ -117,8 +113,6 @@ let show_inst : inst -> string =
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
   | InstCmp (l, r) -> Printf.sprintf "\tcmp %s, %s\n" (show_op l) (show_op r)
   | InstSete op -> Printf.sprintf "\tsete %s\n" (show_op op)
-  | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
-  | InstJne op -> Printf.sprintf "\tjne %s\n" (show_op op)
   | InstRet -> "\tret\n"
 
 let string_label : int -> string =
