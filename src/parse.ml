@@ -11,10 +11,6 @@ type token =
   | TokenLet
   | TokenSwitch
 
-  | TokenEq
-  | TokenAdd
-  | TokenSub
-
   | TokenInt of int
   | TokenIdent of string
   | TokenStr of string
@@ -30,10 +26,6 @@ let show_token : token -> string =
   | TokenReturn -> "return"
   | TokenLet -> "let"
   | TokenSwitch -> "switch"
-
-  | TokenEq -> "="
-  | TokenAdd -> "+"
-  | TokenSub -> "-"
 
   | TokenInt x -> string_of_int x
   | TokenIdent x -> x
@@ -78,9 +70,6 @@ let into_token : string -> token =
   | "let" -> TokenLet
   | "switch" -> TokenSwitch
 
-  | "=" -> TokenEq
-  | "+" -> TokenAdd
-  | "-" -> TokenSub
   | cs ->
     (
       assert ((String.length cs) <> 0);
@@ -154,7 +143,7 @@ let tokenize (source : bytes) : token Queue.t =
           let l : int = r + 1 in
           loop_token l l
         )
-      | '(' | ')' | '{' | '}' | '\\' | '=' | '+' | '-' ->
+      | '(' | ')' | '{' | '}' | '\\' ->
         (
           if l <> r then (
             Queue.add (Bytes.sub_string source l (r - l)) tokens
@@ -236,9 +225,6 @@ and parse_call (tokens : token Queue.t) : expr =
    | _ -> assert false);
   let label : string =
     match Queue.pop tokens with
-    | TokenEq -> "="
-    | TokenAdd -> "+"
-    | TokenSub ->  "-"
     | TokenIdent label -> label
     | _ -> assert false in
   let args : expr list = parse_exprs [] tokens in
