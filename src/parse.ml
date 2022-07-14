@@ -271,7 +271,7 @@ and parse_fn (tokens : token Queue.t) : expr =
   let args : string list = parse_args [] tokens in
   let body : stmt list =
     return_last [] (parse_block tokens (parse_stmts [])) in
-  let label : string = Printf.sprintf "_f%d_" (get_k ()) in
+  let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
   Queue.add { label; args; body } context.funcs;
   ExprVar label
 

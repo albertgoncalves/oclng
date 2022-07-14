@@ -116,7 +116,7 @@ let show_inst : inst -> string =
   | InstRet -> "\tret\n"
 
 let string_label : int -> string =
-  Printf.sprintf "_s%d_"
+  Printf.sprintf "_str_%d_"
 
 let append_inst (inst : inst) : unit =
   Queue.add inst context.insts
@@ -252,7 +252,7 @@ and compile_call (label : string) (args : expr list) : unit =
     )
 
 and compile_branch (label_end : string) (stmts : stmt list) : (string * bool) =
-  let label_branch : string = Printf.sprintf "_branch%d_" (get_k ()) in
+  let label_branch : string = Printf.sprintf "_branch_%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
   let base : int = context.base in
   context.base <- context.stack;
@@ -274,8 +274,8 @@ and compile_branch (label_end : string) (stmts : stmt list) : (string * bool) =
   (label_branch, returned)
 
 and compile_switch (expr : expr) (branches : stmt list list) : unit =
-  let label_table : string = Printf.sprintf "_table%d_" (get_k ()) in
-  let label_end : string = Printf.sprintf "_end%d_" (get_k ()) in
+  let label_table : string = Printf.sprintf "_table_%d_" (get_k ()) in
+  let label_end : string = Printf.sprintf "_end_%d_" (get_k ()) in
   compile_expr expr;
   append_insts
     [
