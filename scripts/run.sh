@@ -3,6 +3,7 @@
 set -eu
 
 "$WD/bin/com" "$1" "$WD/build/main.asm"
+cat "$WD/build/main.asm" >&2
 fasm "$WD/build/main.asm" "$WD/build/main.o" > /dev/null
 ld -fuse-ld=mold -o "$WD/bin/run" -lc "$WD/build/runtime_asm.o" \
     "$WD/build/runtime_c.o" "$WD/build/main.o"
