@@ -64,7 +64,8 @@ let context : context =
     externs = Hashtbl.create 8;
   }
 
-let arg_regs : reg list = [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
+let arg_regs : reg list =
+  [RegRdi; RegRsi; RegRdx; RegRcx; RegR8; RegR9]
 
 let get_k () : int =
   let k : int = context.k in
@@ -120,12 +121,14 @@ let show_inst : inst -> string =
   | InstJne op -> Printf.sprintf "\tjne %s\n" (show_op op)
   | InstRet -> "\tret\n"
 
-let string_label : int -> string = Printf.sprintf "_s%d_"
+let string_label : int -> string =
+  Printf.sprintf "_s%d_"
 
 let append_inst (inst : inst) : unit =
   Queue.add inst context.insts
 
-let append_insts : inst list -> unit = List.iter append_inst
+let append_insts : inst list -> unit =
+  List.iter append_inst
 
 let get_var (n : int) : op =
   OpDeref (RegRsp, context.stack - n)
