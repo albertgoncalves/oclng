@@ -170,6 +170,13 @@ let tokenize (source : bytes) : token Queue.t =
 let rec return_last (prev : stmt list) : stmt list -> stmt list =
   function
   | [] -> List.rev prev
+  | StmtReturn (ExprSwitch (expr, branches)) :: rest ->
+    return_last
+      (
+        StmtReturn (ExprSwitch (expr, List.map (return_last []) branches))
+        :: prev
+      )
+      rest
   | [StmtHold (ExprSwitch (expr, branches))] ->
     return_last
       (
