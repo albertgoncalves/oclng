@@ -81,6 +81,7 @@ let into_token : string -> token =
           TokenStr (String.sub cs 1 (n - 2))
         ) else (
           assert (String.for_all (fun x -> not (is_space x)) cs);
+          assert (cs.[0] <> '_' || cs.[n - 1] <> '_' || cs = "_");
           TokenIdent cs
         )
     )

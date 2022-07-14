@@ -12,7 +12,7 @@ is_odd x {
     }
 }
 
-_entry_ {
+entry {
     let x 12345
     (
         printf

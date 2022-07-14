@@ -21,7 +21,7 @@ syn keyword Statement
     \ let
     \ switch
 syn keyword Function
-    \ _entry_
+    \ entry
     \ printf
 
 let b:current_syntax = "oc"

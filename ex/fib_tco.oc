@@ -1,4 +1,4 @@
-_entry_ {
+entry {
     (printf "%ld\n" (fib 50 0 1))
     0
 }
