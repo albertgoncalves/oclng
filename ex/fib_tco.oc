@@ -5,11 +5,8 @@ entry {
 
 fib n a b {
     switch (= n 0) {
-        {
-            (fib (- n 1) b (+ a b))
-        }
-        {
-            a
-        }
+        (fib (- n 1) b (+ a b))
+    } {
+        a
     }
 }

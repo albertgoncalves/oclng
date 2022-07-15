@@ -247,10 +247,7 @@ and parse_branch
   match Queue.peek tokens with
   | TokenLBrace ->
     parse_branch (parse_block tokens (parse_stmts []) :: prev) tokens
-  | TokenRBrace ->
-    let _ : token = Queue.pop tokens in
-    List.rev prev
-  | _ -> assert false
+  | _ -> List.rev prev
 
 and parse_switch (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
@@ -260,9 +257,6 @@ and parse_switch (tokens : token Queue.t) : expr =
     match parse_expr tokens with
     | Some expr -> expr
     | None -> assert false in
-  (match Queue.pop tokens with
-   | TokenLBrace -> ()
-   | _ -> assert false);
   ExprSwitch (expr, parse_branch [] tokens)
 
 and parse_fn (tokens : token Queue.t) : expr =

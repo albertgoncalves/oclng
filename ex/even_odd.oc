@@ -1,14 +1,16 @@
 is_even x {
     switch (= x 0) {
-        { (is_odd (- x 1)) }
-        { 1 }
+        (is_odd (- x 1))
+    } {
+        1
     }
 }
 
 is_odd x {
     switch (= x 0) {
-        { (is_even (- x 1)) }
-        { 0 }
+        (is_even (- x 1))
+    } {
+        0
     }
 }
 
@@ -18,7 +20,7 @@ entry {
         printf
         "%ld is %s\n"
         x
-        switch (is_even x) { { let y "odd" y } { "even" } }
+        switch (is_even x) { let y "odd" y } { "even" }
     )
     0
 }
