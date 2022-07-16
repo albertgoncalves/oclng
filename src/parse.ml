@@ -257,7 +257,9 @@ and parse_switch (tokens : token Queue.t) : expr =
     match parse_expr tokens with
     | Some expr -> expr
     | None -> assert false in
-  ExprSwitch (expr, parse_branch [] tokens)
+  let branches : stmt list list = parse_branch [] tokens in
+  assert (List.length branches <> 0);
+  ExprSwitch (expr, branches)
 
 and parse_fn (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
