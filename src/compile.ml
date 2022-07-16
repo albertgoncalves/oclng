@@ -42,7 +42,7 @@ type context =
     mutable k : int;
     mutable stack : int;
     mutable base : int;
-    mutable vars : (string, int) Hashtbl.t;
+    vars : (string, int) Hashtbl.t;
     insts : inst Queue.t;
     strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
@@ -253,12 +253,14 @@ and compile_call (label : string) (args : expr list) : unit =
       context.stack <- context.stack + 1;
     )
 
-and compile_branch (label_end : string) (stmts : stmt list) : (string * bool) =
+and compile_branch
+    (base : int)
+    (vars : string list)
+    (label_end : string)
+    (stmts : stmt list) : (string * bool) =
   let label_branch : string = Printf.sprintf "_branch_%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
-  let base : int = context.base in
   context.base <- context.stack;
-  let vars : (string, int) Hashtbl.t = Hashtbl.copy context.vars in
   let returned : bool = compile_stmts stmts in
   if not returned then (
     append_inst (InstPop (OpReg RegRax));
@@ -272,7 +274,13 @@ and compile_branch (label_end : string) (stmts : stmt list) : (string * bool) =
   );
   context.stack <- context.base;
   context.base <- base;
-  context.vars <- vars;
+  Seq.iter
+    (fun k -> Hashtbl.remove context.vars k)
+    (
+      Seq.filter
+        (fun k -> not (List.mem k vars))
+        (Hashtbl.to_seq_keys context.vars)
+    );
   (label_branch, returned)
 
 and compile_switch (expr : expr) (branches : stmt list list) : unit =
@@ -285,8 +293,10 @@ and compile_switch (expr : expr) (branches : stmt list list) : unit =
       InstJmp (OpDerefLabelReg (label_table, RegR10));
     ];
   context.stack <- context.stack - 1;
+  let base : int = context.base in
+  let vars : string list = List.of_seq (Hashtbl.to_seq_keys context.vars) in
   let (label_branches, returns) : (string list * bool list) =
-    List.split (List.map (compile_branch label_end) branches) in
+    List.split (List.map (compile_branch base vars label_end) branches) in
   if not (List.for_all (fun x -> x) returns) then (
     append_insts
       [
