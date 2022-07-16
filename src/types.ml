@@ -19,11 +19,11 @@ type func =
   }
 
 let encode (chars : char list) : string =
-  let rec f : char list -> char list =
+  let rec f (prev : char list) : char list -> char list =
     function
-    | [] -> []
-    | '"' :: ',' :: '"' :: xs -> f xs
-    | x :: xs -> x :: f xs in
+    | [] -> List.rev prev
+    | '"' :: ',' :: '"' :: xs -> f prev xs
+    | x :: xs -> f (x :: prev) xs in
   chars
   |> List.map
     (function
@@ -32,7 +32,7 @@ let encode (chars : char list) : string =
   |> String.concat ","
   |> String.to_seq
   |> List.of_seq
-  |> f
+  |> f []
   |> List.to_seq
   |> String.of_seq
 
