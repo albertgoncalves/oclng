@@ -42,12 +42,12 @@ type context =
     mutable k : int;
     mutable stack : int;
     mutable base : int;
+    mutable has_entry : bool;
     vars : (string, int) Hashtbl.t;
     insts : inst Queue.t;
     strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
-    mutable entry_found : bool;
   }
 
 let context : context =
@@ -55,12 +55,12 @@ let context : context =
     k = 0;
     stack = 0;
     base = 0;
+    has_entry = false;
     vars = Hashtbl.create 8;
     insts = Queue.create ();
     strings = Hashtbl.create 64;
     tables = Queue.create ();
     externs = Hashtbl.create 8;
-    entry_found = false;
   }
 
 let arg_regs : reg list =
@@ -365,7 +365,7 @@ let compile_func (func : func) : unit =
   (match func.label with
    | "entry" ->
      (
-       context.entry_found <- true;
+       context.has_entry <- true;
        append_inst (InstLabel "_entry_")
      )
    | label -> append_inst (InstLabel label));
@@ -392,7 +392,7 @@ let rec opt_jump (prev : inst list) : inst list -> inst list =
 let compile (funcs : func list) : Buffer.t =
   List.iter (fun f -> Printf.fprintf stderr "%s\n" (show_func f)) funcs;
   List.iter compile_func funcs;
-  assert (context.entry_found);
+  assert (context.has_entry);
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
     "format ELF64\n\
