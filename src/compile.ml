@@ -16,8 +16,8 @@ type reg =
 
 type op =
   | OpReg of reg
-  | OpDeref of (reg * int)
-  | OpTable of (string * reg)
+  | OpDerefRegImm of (reg * int)
+  | OpDerefLabelReg of (string * reg)
   | OpImm of int
   | OpLabel of string
 
@@ -89,12 +89,12 @@ let show_reg : reg -> string =
 let show_op : op -> string =
   function
   | OpReg reg -> show_reg reg
-  | OpDeref (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
-  | OpDeref (reg, offset) when offset < 0 ->
+  | OpDerefRegImm (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
+  | OpDerefRegImm (reg, offset) when offset < 0 ->
     Printf.sprintf "qword [%s - %d]" (show_reg reg) (offset * -8)
-  | OpDeref (reg, offset) ->
+  | OpDerefRegImm (reg, offset) ->
     Printf.sprintf "qword [%s + %d]" (show_reg reg) (offset * 8)
-  | OpTable (label, reg) ->
+  | OpDerefLabelReg (label, reg) ->
     Printf.sprintf "[%s + (%s * 8)]" label (show_reg reg)
   | OpImm x -> string_of_int x
   | OpLabel str -> str
@@ -127,7 +127,7 @@ let append_insts : inst list -> unit =
   List.iter append_inst
 
 let get_var (n : int) : op =
-  OpDeref (RegRsp, context.stack - n)
+  OpDerefRegImm (RegRsp, context.stack - n)
 
 let compile_string (str : string) (label : string) : string =
   Printf.sprintf "\t%s db %s,0\n" label (show_string str)
@@ -282,7 +282,7 @@ and compile_switch (expr : expr) (branches : stmt list list) : unit =
   append_insts
     [
       InstPop (OpReg RegR10);
-      InstJmp (OpTable (label_table, RegR10));
+      InstJmp (OpDerefLabelReg (label_table, RegR10));
     ];
   context.stack <- context.stack - 1;
   let (label_branches, returns) : (string list * bool list) =
