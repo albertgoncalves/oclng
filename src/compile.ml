@@ -237,7 +237,7 @@ and compile_call (label : string) (args : expr list) : unit =
           InstPush (OpReg RegRax);
         ];
       context.stack <- context.stack + 1;
-      Hashtbl.replace context.externs "printf" ();
+      Hashtbl.replace context.externs "printf" ()
     )
   | _ ->
     (
@@ -250,7 +250,7 @@ and compile_call (label : string) (args : expr list) : unit =
              | Some n -> get_var n);
           InstPush (OpReg RegRax);
         ];
-      context.stack <- context.stack + 1;
+      context.stack <- context.stack + 1
     )
 
 and compile_branch
@@ -328,7 +328,7 @@ and compile_stmt : stmt -> unit =
   | StmtLet (var, expr) ->
     (
       compile_expr expr;
-      append_var var;
+      append_var var
     )
   | StmtReturn (ExprCall ("=", _) as expr)
   | StmtReturn (ExprCall ("+", _) as expr)
