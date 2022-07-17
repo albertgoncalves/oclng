@@ -374,13 +374,10 @@ and compile_stmts : stmt list -> bool =
 let compile_func (func : func) : unit =
   context.stack <- 0;
   Hashtbl.clear context.vars;
-  (match func.label with
-   | "entry" ->
-     (
-       context.has_entry <- true;
-       append_inst (InstLabel "_entry_")
-     )
-   | label -> append_inst (InstLabel label));
+  if func.label = "_entry_" then (
+    context.has_entry <- true
+  );
+  append_inst (InstLabel func.label);
   compile_func_args arg_regs func.args;
   assert (compile_stmts func.body)
 

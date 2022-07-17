@@ -70,6 +70,9 @@ let into_token : string -> token =
   | "let" -> TokenLet
   | "switch" -> TokenSwitch
 
+  | "entry" -> TokenIdent "_entry_"
+  | "loop" -> TokenIdent "loop_"
+
   | cs ->
     (
       assert ((String.length cs) <> 0);
