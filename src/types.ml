@@ -8,10 +8,11 @@ and expr =
   | ExprInt of int
   | ExprStr of string
   | ExprVar of string
+  | ExprFn of func
   | ExprCall of (string * expr list)
   | ExprSwitch of (expr * stmt list list)
 
-type func =
+and func =
   {
     label : string;
     args : string list;
@@ -44,6 +45,7 @@ let rec show_expr : expr -> string =
   | ExprInt x -> string_of_int x
   | ExprStr x -> show_string x
   | ExprVar x -> x
+  | ExprFn func -> func.label
   | ExprCall (label, []) -> Printf.sprintf "(%s)" label
   | ExprCall (label, args) -> Printf.sprintf "(%s %s)" label (show_exprs args)
   | ExprSwitch (packed, branches) ->

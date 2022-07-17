@@ -34,13 +34,11 @@ let show_token : token -> string =
 type context =
   {
     mutable k : int;
-    funcs : func Queue.t;
   }
 
 let context : context =
   {
     k = 0;
-    funcs = Queue.create ();
   }
 
 let get_k () : int =
@@ -272,8 +270,7 @@ and parse_fn (tokens : token Queue.t) : expr =
   let body : stmt list =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
-  Queue.add { label; args; body } context.funcs;
-  ExprVar label
+  ExprFn { label; args; body }
 
 and parse_stmt (tokens : token Queue.t) : stmt option =
   match Queue.peek tokens with
@@ -326,7 +323,8 @@ let parse_func (tokens : token Queue.t) : func =
   }
 
 let parse (tokens : token Queue.t) : func Queue.t =
+  let funcs : func Queue.t = Queue.create () in
   while (Queue.length tokens) <> 0 do
-    Queue.add (parse_func tokens) context.funcs
+    Queue.add (parse_func tokens) funcs
   done;
-  context.funcs
+  funcs

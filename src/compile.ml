@@ -48,6 +48,7 @@ type context =
     strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
+    funcs : func Queue.t;
   }
 
 let context : context =
@@ -61,6 +62,7 @@ let context : context =
     strings = Hashtbl.create 64;
     tables = Queue.create ();
     externs = Hashtbl.create 8;
+    funcs = Queue.create ();
   }
 
 let arg_regs : reg list =
@@ -172,6 +174,12 @@ let rec compile_expr : expr -> unit =
           )
         | Some label -> label in
       append_inst (InstPush (OpLabel label));
+      context.stack <- context.stack + 1
+    )
+  | ExprFn func ->
+    (
+      Queue.add func context.funcs;
+      append_inst (InstPush (OpLabel func.label));
       context.stack <- context.stack + 1
     )
   | ExprVar var ->
@@ -372,6 +380,7 @@ and compile_stmts : stmt list -> bool =
     )
 
 let compile_func (func : func) : unit =
+  Printf.fprintf stderr "%s\n" (show_func func);
   context.stack <- 0;
   Hashtbl.clear context.vars;
   if func.label = "_entry_" then (
@@ -398,9 +407,11 @@ let rec opt_jump (prev : inst list) : inst list -> inst list =
     when label0 = label1 -> opt_jump (InstLabel label1 :: prev) insts
   | inst :: insts -> opt_jump (inst :: prev) insts
 
-let compile (funcs : func list) : Buffer.t =
-  List.iter (fun f -> Printf.fprintf stderr "%s\n" (show_func f)) funcs;
-  List.iter compile_func funcs;
+let compile (funcs : func Queue.t) : Buffer.t =
+  Queue.transfer funcs context.funcs;
+  while not (Queue.is_empty context.funcs) do
+    compile_func (Queue.take context.funcs)
+  done;
   assert (context.has_entry);
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer

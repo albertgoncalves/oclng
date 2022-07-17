@@ -7,8 +7,6 @@ let () : unit =
   let buffer : Buffer.t =
     Parse.tokenize source
     |> Parse.parse
-    |> Queue.to_seq
-    |> List.of_seq
     |> Compile.compile in
   let file : out_channel = open_out Sys.argv.(2) in
   Buffer.output_buffer file buffer;
