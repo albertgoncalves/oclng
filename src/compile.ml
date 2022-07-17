@@ -337,10 +337,22 @@ and compile_stmt : stmt -> unit =
   | StmtReturn (ExprCall (label, args)) ->
     (
       compile_call_args arg_regs args;
-      if context.stack <> 0 then (
-        append_inst (InstDrop context.stack)
-      );
-      append_inst (InstJmp (OpLabel label))
+      match Hashtbl.find_opt context.vars label with
+      | None ->
+        (
+          if context.stack <> 0 then (
+            append_inst (InstDrop context.stack)
+          );
+          append_inst (InstJmp (OpLabel label))
+        )
+      | Some n ->
+        (
+          append_inst (InstMov (OpReg RegR10, get_var n));
+          if context.stack <> 0 then (
+            append_inst (InstDrop context.stack)
+          );
+          append_inst (InstJmp (OpReg RegR10))
+        )
     )
   | StmtReturn expr -> compile_return expr
 
