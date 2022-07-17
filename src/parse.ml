@@ -316,11 +316,7 @@ let parse_func (tokens : token Queue.t) : func =
   let args : string list = parse_args [] tokens in
   let body : stmt list =
     return_last [] (parse_block tokens (parse_stmts [])) in
-  {
-    label;
-    args;
-    body;
-  }
+  { label; args; body; }
 
 let parse (tokens : token Queue.t) : func Queue.t =
   let funcs : func Queue.t = Queue.create () in
