@@ -20,7 +20,7 @@ class Tests(TestCase):
         self.into_test("early_return", "returned early")
 
     def test_even_odd(self):
-        self.into_test("even_odd", "12345 is odd")
+        self.into_test("even_odd", "1234567 is odd")
 
     def test_fib_tco(self):
         self.into_test("fib_tco", 12586269025)

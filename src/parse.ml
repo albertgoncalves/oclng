@@ -207,6 +207,54 @@ let parse_block (tokens : token Queue.t) (f : token Queue.t -> 'a) : 'a =
      | _ -> assert false)
   | _ -> assert false
 
+let rec resolve_expr (mapping : (string, string) Hashtbl.t) : expr -> expr =
+  function
+  | ExprVar var ->
+    (match Hashtbl.find_opt mapping var with
+     | Some label -> ExprVar label
+     | None -> ExprVar var)
+  | ExprFn func ->
+    ExprFn
+      {
+        label = func.label;
+        args = func.args;
+        body = resolve_stmts (Hashtbl.copy mapping) func.body;
+      }
+  | ExprSwitch (expr, branches) ->
+    ExprSwitch
+      (
+        resolve_expr mapping expr,
+        List.map (resolve_stmts (Hashtbl.copy mapping)) branches
+      )
+  | ExprCall (label, args) ->
+    ExprCall
+      (
+        (match Hashtbl.find_opt mapping label with
+         | Some label -> label
+         | None -> label),
+        List.map (resolve_expr mapping) args
+      )
+  | expr -> expr
+
+and resolve_stmts
+    (mapping : (string, string) Hashtbl.t) : stmt list -> stmt list =
+  function
+  | [] -> []
+  | StmtLet (var, (ExprFn func as expr)) :: rest ->
+    (
+      Hashtbl.add mapping var func.label;
+      let rest : stmt list = resolve_stmts mapping rest in
+      StmtDrop (resolve_expr mapping expr) :: rest
+    )
+  | StmtLet (var, expr) :: rest ->
+    StmtLet (var, resolve_expr mapping expr) :: (resolve_stmts mapping rest)
+  | StmtDrop expr :: rest ->
+    StmtDrop (resolve_expr mapping expr) :: (resolve_stmts mapping rest)
+  | StmtHold expr :: rest ->
+    StmtHold (resolve_expr mapping expr) :: (resolve_stmts mapping rest)
+  | StmtReturn expr :: rest ->
+    StmtReturn (resolve_expr mapping expr) :: (resolve_stmts mapping rest)
+
 let rec parse_expr (tokens : token Queue.t) : expr option =
   match Queue.peek tokens with
   | TokenInt x ->
@@ -304,6 +352,13 @@ and parse_let (tokens : token Queue.t) : stmt =
     | _ -> assert false in
   let expr : expr =
     match parse_expr tokens with
+    | Some (ExprFn func) ->
+      ExprFn
+        {
+          label = Printf.sprintf "_%s_%d_" var (get_k ());
+          args = func.args;
+          body = func.body
+        }
     | Some expr -> expr
     | None -> assert false in
   StmtLet (var, expr)
@@ -315,7 +370,10 @@ let parse_func (tokens : token Queue.t) : func =
     | _ -> assert false in
   let args : string list = parse_args [] tokens in
   let body : stmt list =
-    return_last [] (parse_block tokens (parse_stmts [])) in
+    parse_stmts []
+    |> parse_block tokens
+    |> return_last []
+    |> resolve_stmts (Hashtbl.create 16) in
   { label; args; body; }
 
 let parse (tokens : token Queue.t) : func Queue.t =

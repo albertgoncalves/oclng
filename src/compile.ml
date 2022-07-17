@@ -333,6 +333,7 @@ and compile_stmt : stmt -> unit =
       append_inst (InstDrop 1);
       context.stack <- context.stack - 1
     )
+  | StmtLet (_, ExprFn _) -> assert false
   | StmtLet (var, expr) ->
     (
       compile_expr expr;
