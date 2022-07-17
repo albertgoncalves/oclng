@@ -69,7 +69,7 @@ let into_token : string -> token =
   | "switch" -> TokenSwitch
 
   | "entry" -> TokenIdent "_entry_"
-  | "loop" -> TokenIdent "loop_"
+  | "loop" -> TokenIdent "_loop_"
 
   | cs ->
     (
