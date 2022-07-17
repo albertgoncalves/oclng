@@ -16,7 +16,7 @@ type reg =
 
 type op =
   | OpReg of reg
-  | OpDerefRegImm of (reg * int)
+  | OpDerefRegOffset of (reg * int)
   | OpDerefLabelReg of (string * reg)
   | OpImm of int
   | OpLabel of string
@@ -89,10 +89,10 @@ let show_reg : reg -> string =
 let show_op : op -> string =
   function
   | OpReg reg -> show_reg reg
-  | OpDerefRegImm (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
-  | OpDerefRegImm (reg, offset) when offset < 0 ->
+  | OpDerefRegOffset (reg, 0) -> Printf.sprintf "qword [%s]" (show_reg reg)
+  | OpDerefRegOffset (reg, offset) when offset < 0 ->
     Printf.sprintf "qword [%s - %d]" (show_reg reg) (offset * -8)
-  | OpDerefRegImm (reg, offset) ->
+  | OpDerefRegOffset (reg, offset) ->
     Printf.sprintf "qword [%s + %d]" (show_reg reg) (offset * 8)
   | OpDerefLabelReg (label, reg) ->
     Printf.sprintf "[%s + (%s * 8)]" label (show_reg reg)
@@ -127,7 +127,7 @@ let append_insts : inst list -> unit =
   List.iter append_inst
 
 let get_var (n : int) : op =
-  OpDerefRegImm (RegRsp, context.stack - n)
+  OpDerefRegOffset (RegRsp, context.stack - n)
 
 let compile_string (str : string) (label : string) : string =
   Printf.sprintf "\t%s db %s,0\n" label (show_string str)
