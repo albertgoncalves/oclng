@@ -49,10 +49,10 @@ let rec show_expr : expr -> string =
   | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr expr)
   | ExprCall (expr, args) ->
     Printf.sprintf "(%s %s)" (show_expr expr) (show_exprs args)
-  | ExprSwitch (packed, branches) ->
+  | ExprSwitch (expr, branches) ->
     Printf.sprintf
       "branch %s { %s }"
-      (show_expr packed)
+      (show_expr expr)
       (
         String.concat
           " } { "
