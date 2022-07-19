@@ -9,7 +9,7 @@ and expr =
   | ExprStr of string
   | ExprVar of string
   | ExprFn of func
-  | ExprCall of (string * expr list)
+  | ExprCall of (expr * expr list)
   | ExprSwitch of (expr * stmt list list)
 
 and func =
@@ -46,8 +46,9 @@ let rec show_expr : expr -> string =
   | ExprStr x -> show_string x
   | ExprVar x -> x
   | ExprFn func -> func.label
-  | ExprCall (label, []) -> Printf.sprintf "(%s)" label
-  | ExprCall (label, args) -> Printf.sprintf "(%s %s)" label (show_exprs args)
+  | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr expr)
+  | ExprCall (expr, args) ->
+    Printf.sprintf "(%s %s)" (show_expr expr) (show_exprs args)
   | ExprSwitch (packed, branches) ->
     Printf.sprintf
       "branch %s { %s }"

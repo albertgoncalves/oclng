@@ -17,12 +17,11 @@ entry {
             0
         }
     }
-    let f (is_even)
     (
         printf
         "%ld is %s\n"
         x
-        switch (f x) { let y "odd" y } { "even" }
+        switch ((is_even) x) { let y "odd" y } { "even" }
     )
     0
 }

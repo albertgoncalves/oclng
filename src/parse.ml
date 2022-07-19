@@ -226,14 +226,8 @@ let rec resolve_expr (mapping : (string, string) Hashtbl.t) : expr -> expr =
         resolve_expr mapping expr,
         List.map (resolve_stmts (Hashtbl.copy mapping)) branches
       )
-  | ExprCall (label, args) ->
-    ExprCall
-      (
-        (match Hashtbl.find_opt mapping label with
-         | Some label -> label
-         | None -> label),
-        List.map (resolve_expr mapping) args
-      )
+  | ExprCall (expr, args) ->
+    ExprCall (resolve_expr mapping expr, List.map (resolve_expr mapping) args)
   | expr -> expr
 
 and resolve_stmts
@@ -280,15 +274,15 @@ and parse_call (tokens : token Queue.t) : expr =
   (match Queue.pop tokens with
    | TokenLParen -> ()
    | _ -> assert false);
-  let label : string =
-    match Queue.pop tokens with
-    | TokenIdent label -> label
-    | _ -> assert false in
+  let expr : expr =
+    match parse_expr tokens with
+    | Some expr -> expr
+    | None -> assert false in
   let args : expr list = parse_exprs [] tokens in
   (match Queue.pop tokens with
    | TokenRParen -> ()
    | _ -> assert false);
-  ExprCall (label, args)
+  ExprCall (expr, args)
 
 and parse_branch
     (prev : stmt list list)

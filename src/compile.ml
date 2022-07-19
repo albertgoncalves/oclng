@@ -190,7 +190,20 @@ let rec compile_expr : expr -> unit =
          | None -> InstPush (OpLabel var));
       context.stack <- context.stack + 1
     )
-  | ExprCall (label, args) -> compile_call label args
+  | ExprCall (ExprVar label, args) -> compile_call_label label args
+  | ExprCall (expr, args) ->
+    (
+      compile_call_args arg_regs args;
+      compile_expr expr;
+      append_inst (InstPop (OpReg RegR10));
+      context.stack <- context.stack - 1;
+      append_insts
+        [
+          InstCall (OpReg RegR10);
+          InstPush (OpReg RegRax);
+        ];
+      context.stack <- context.stack + 1
+    )
   | ExprSwitch (expr, branches) -> compile_switch expr branches
 
 and compile_call_args (regs : reg list) : expr list -> unit =
@@ -207,7 +220,7 @@ and compile_call_args (regs : reg list) : expr list -> unit =
          context.stack <- context.stack - 1;
        ))
 
-and compile_call (label : string) (args : expr list) : unit =
+and compile_call_label (label : string) (args : expr list) : unit =
   match label with
   | "=" | "+" | "-" ->
     (match args with
@@ -339,11 +352,11 @@ and compile_stmt : stmt -> unit =
       compile_expr expr;
       append_var var
     )
-  | StmtReturn (ExprCall ("=", _) as expr)
-  | StmtReturn (ExprCall ("+", _) as expr)
-  | StmtReturn (ExprCall ("-", _) as expr) -> compile_return expr
+  | StmtReturn (ExprCall (ExprVar "=", _) as expr)
+  | StmtReturn (ExprCall (ExprVar "+", _) as expr)
+  | StmtReturn (ExprCall (ExprVar "-", _) as expr) -> compile_return expr
   | StmtReturn (ExprSwitch (expr, branches)) -> compile_switch expr branches
-  | StmtReturn (ExprCall (label, args)) ->
+  | StmtReturn (ExprCall (ExprVar label, args)) ->
     (
       compile_call_args arg_regs args;
       match Hashtbl.find_opt context.vars label with
@@ -362,6 +375,17 @@ and compile_stmt : stmt -> unit =
           );
           append_inst (InstJmp (OpReg RegR10))
         )
+    )
+  | StmtReturn (ExprCall (expr, args)) ->
+    (
+      compile_call_args arg_regs args;
+      compile_expr expr;
+      append_inst (InstPop (OpReg RegR10));
+      context.stack <- context.stack - 1;
+      if context.stack <> 0 then (
+        append_inst (InstDrop context.stack)
+      );
+      append_inst (InstJmp (OpReg RegR10))
     )
   | StmtReturn expr -> compile_return expr
 
