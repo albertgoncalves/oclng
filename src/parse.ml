@@ -179,6 +179,16 @@ let tokenize () : token_pos Queue.t =
   |> List.to_seq
   |> Queue.of_seq
 
+let peek (tokens : token_pos Queue.t) : token_pos =
+  match Queue.peek_opt tokens with
+  | Some token -> token
+  | None -> Io.exit_at (Io.context.len - 1)
+
+let pop (tokens : token_pos Queue.t) : token_pos =
+  match Queue.take_opt tokens with
+  | Some token -> token
+  | None -> Io.exit_at (Io.context.len - 1)
+
 let rec return_last (prev : stmt list) : stmt list -> stmt list =
   function
   | [] -> List.rev prev
@@ -202,19 +212,19 @@ let rec return_last (prev : stmt list) : stmt list -> stmt list =
 let rec parse_args
     (prev : string list)
     (tokens : token_pos Queue.t) : string list =
-  match Queue.peek tokens with
+  match peek tokens with
   | (TokenIdent x, _) ->
-    let _ : token_pos = Queue.pop tokens in
+    let _ : token_pos = pop tokens in
     parse_args (x :: prev) tokens
   | _ -> List.rev prev
 
 let parse_block
     (tokens : token_pos Queue.t)
     (f : token_pos Queue.t -> 'a) : 'a =
-  match Queue.pop tokens with
+  match pop tokens with
   | (TokenLBrace, _) ->
     let x : 'a = f tokens in
-    (match Queue.pop tokens with
+    (match pop tokens with
      | (TokenRBrace, _) -> x
      | (_, offset) -> Io.exit_at offset)
   | (_, offset) -> Io.exit_at offset
@@ -262,15 +272,15 @@ and resolve_stmts
     StmtReturn (resolve_expr mapping expr) :: (resolve_stmts mapping rest)
 
 let rec parse_expr (tokens : token_pos Queue.t) : expr option =
-  match Queue.peek tokens with
+  match peek tokens with
   | (TokenInt x, _) ->
-    let _ : token_pos = Queue.pop tokens in
+    let _ : token_pos = pop tokens in
     Some (ExprInt x)
   | (TokenIdent x, _) ->
-    let _ : token_pos = Queue.pop tokens in
+    let _ : token_pos = pop tokens in
     Some (ExprVar x)
   | (TokenStr x, _) ->
-    let _ : token_pos = Queue.pop tokens in
+    let _ : token_pos = pop tokens in
     Some (ExprStr x)
   | (TokenLParen, _) -> Some (parse_call tokens)
   | (TokenSwitch, _) -> Some (parse_switch tokens)
@@ -283,7 +293,7 @@ and parse_exprs (prev : expr list) (tokens : token_pos Queue.t) : expr list =
   | Some expr -> parse_exprs (expr :: prev) tokens
 
 and parse_call (tokens : token_pos Queue.t) : expr =
-  (match Queue.pop tokens with
+  (match pop tokens with
    | (TokenLParen, _) -> ()
    | (_, offset) -> Io.exit_at offset);
   let expr : expr =
@@ -291,7 +301,7 @@ and parse_call (tokens : token_pos Queue.t) : expr =
     | Some expr -> expr
     | None -> assert false in
   let args : expr list = parse_exprs [] tokens in
-  (match Queue.pop tokens with
+  (match pop tokens with
    | (TokenRParen, _) -> ()
    | (_, offset) -> Io.exit_at offset);
   ExprCall (expr, args)
@@ -299,13 +309,13 @@ and parse_call (tokens : token_pos Queue.t) : expr =
 and parse_branch
     (prev : stmt list list)
     (tokens : token_pos Queue.t) : stmt list list =
-  match Queue.peek tokens with
+  match peek tokens with
   | (TokenLBrace, _) ->
     parse_branch (parse_block tokens (parse_stmts []) :: prev) tokens
   | _ -> List.rev prev
 
 and parse_switch (tokens : token_pos Queue.t) : expr =
-  (match Queue.pop tokens with
+  (match pop tokens with
    | (TokenSwitch, _) -> ()
    | (_, offset) -> Io.exit_at offset);
   let expr : expr =
@@ -317,7 +327,7 @@ and parse_switch (tokens : token_pos Queue.t) : expr =
   ExprSwitch (expr, branches)
 
 and parse_fn (tokens : token_pos Queue.t) : expr =
-  (match Queue.pop tokens with
+  (match pop tokens with
    | (TokenSlash, _) -> ()
    | (_, offset) -> Io.exit_at offset);
   let args : string list = parse_args [] tokens in
@@ -327,9 +337,9 @@ and parse_fn (tokens : token_pos Queue.t) : expr =
   ExprFn { label; args; body }
 
 and parse_stmt (tokens : token_pos Queue.t) : stmt option =
-  match Queue.peek tokens with
+  match peek tokens with
   | (TokenReturn, _) ->
-    let _ : token_pos = Queue.pop tokens in
+    let _ : token_pos = pop tokens in
     (match parse_expr tokens with
      | Some expr -> Some (StmtReturn expr)
      | _ -> assert false)
@@ -343,10 +353,10 @@ and parse_stmts (prev : stmt list) (tokens : token_pos Queue.t) : stmt list =
   match parse_stmt tokens with
   | None -> assert false
   | Some stmt ->
-    match Queue.peek tokens with
+    match peek tokens with
     | (TokenSemiC, _) ->
       (
-        let _ : token_pos = Queue.pop tokens in
+        let _ : token_pos = pop tokens in
         parse_stmts (stmt :: prev) tokens
       )
     | _ ->
@@ -356,11 +366,11 @@ and parse_stmts (prev : stmt list) (tokens : token_pos Queue.t) : stmt list =
       | _ -> assert false
 
 and parse_let (tokens : token_pos Queue.t) : stmt =
-  (match Queue.pop tokens with
+  (match pop tokens with
    | (TokenLet, _) -> ()
    | (_, offset) -> Io.exit_at offset);
   let var : string =
-    match Queue.pop tokens with
+    match pop tokens with
     | (TokenIdent x, _) -> x
     | (_, offset) -> Io.exit_at offset in
   let expr : expr =
@@ -378,7 +388,7 @@ and parse_let (tokens : token_pos Queue.t) : stmt =
 
 let parse_func (tokens : token_pos Queue.t) : func =
   let label : string =
-    match Queue.pop tokens with
+    match pop tokens with
     | (TokenIdent x, _) -> x
     | (_, offset) -> Io.exit_at offset in
   let args : string list = parse_args [] tokens in

@@ -1,21 +1,23 @@
 type context =
   {
     mutable path : string;
+    mutable len : int;
     mutable source : Bytes.t;
   }
 
 let context : context =
   {
     path = "";
+    len = 0;
     source = Bytes.empty;
   }
 
 let load_file (path : string) : unit =
   context.path <- path;
   let file : in_channel = open_in context.path in
-  let n : int = in_channel_length file in
-  context.source <- Bytes.create n;
-  really_input file context.source 0 n;
+  context.len <- in_channel_length file;
+  context.source <- Bytes.create context.len;
+  really_input file context.source 0 context.len;
   close_in file
 
 let exit_at (offset : int) : 'a =
