@@ -4,6 +4,7 @@ set -eu
 
 memory_cap=1024
 flags_ocaml=(
+    -g
     -nolabels
     -strict-formats
     -strict-sequence
