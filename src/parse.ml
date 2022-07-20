@@ -5,6 +5,7 @@ type token =
   | TokenRParen
   | TokenLBrace
   | TokenRBrace
+  | TokenSemiC
   | TokenSlash
 
   | TokenReturn
@@ -21,6 +22,7 @@ let show_token : token -> string =
   | TokenRParen -> ")"
   | TokenLBrace -> "{"
   | TokenRBrace -> "}"
+  | TokenSemiC -> ";"
   | TokenSlash -> "\\"
 
   | TokenReturn -> "return"
@@ -62,6 +64,7 @@ let into_token : string -> token =
   | ")" -> TokenRParen
   | "{" -> TokenLBrace
   | "}" -> TokenRBrace
+  | ";" -> TokenSemiC
   | "\\" -> TokenSlash
 
   | "return" -> TokenReturn
@@ -145,7 +148,7 @@ let tokenize (source : bytes) : token Queue.t =
           let l : int = r + 1 in
           loop_token l l
         )
-      | '(' | ')' | '{' | '}' | '\\' ->
+      | '(' | ')' | '{' | '}' | ';' | '\\' ->
         (
           if l <> r then (
             Queue.add (Bytes.sub_string source l (r - l)) tokens
@@ -329,12 +332,19 @@ and parse_stmt (tokens : token Queue.t) : stmt option =
 
 and parse_stmts (prev : stmt list) (tokens : token Queue.t) : stmt list =
   match parse_stmt tokens with
-  | None ->
-    (match prev with
-     | StmtDrop expr :: rest -> List.rev (StmtHold expr :: rest)
-     | (StmtReturn _ :: _) as stmts -> List.rev stmts
-     | _ -> assert false)
-  | Some stmt -> parse_stmts (stmt :: prev) tokens
+  | None -> assert false
+  | Some stmt ->
+    match Queue.peek tokens with
+    | TokenSemiC ->
+      (
+        let _ : token = Queue.pop tokens in
+        parse_stmts (stmt :: prev) tokens
+      )
+    | _ ->
+      match stmt with
+      | StmtDrop expr -> List.rev (StmtHold expr :: prev)
+      | StmtReturn _ -> List.rev (stmt :: prev)
+      | _ -> assert false
 
 and parse_let (tokens : token Queue.t) : stmt =
   (match Queue.pop tokens with

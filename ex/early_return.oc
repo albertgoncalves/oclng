@@ -1,24 +1,24 @@
 entry {
-    let x 0
+    let x 0;
     (
         printf
         "did not return early (%ld)\n"
         switch (= 0 0) {
-            let y 2
+            let y 2;
             y
         } {
-            let w 4
+            let w 4;
             switch 2 {
                 3
             } {
-                let y 4
-                let z 5
+                let y 4;
+                let z 5;
                 (+ w y)
             } {
-                (printf "returned early\n")
+                (printf "returned early\n");
                 return x
             }
         }
-    )
+    );
     x
 }

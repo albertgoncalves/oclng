@@ -7,7 +7,7 @@ if exists("b:current_syntax")
 endif
 
 syn match Comment   "#.*$"
-syn match Operator  "[(){}\\=+\-]"
+syn match Operator  "[(){};\\=+\-]"
 syn match Number    "\<[0-9]\+\>"
 
 syn match ocSpecial contained "\\\(n\|\"\|\\\)"

@@ -1,5 +1,5 @@
 f0 {
-    let f \ { f3 }
+    let f \ { f3 };
     f
 }
 
@@ -8,8 +8,8 @@ f3 {
 }
 
 entry {
-    let f1 \x { (- (((f0))) x) }
-    let f2 f1
-    (printf "%ld\n" (f2 124))
+    let f1 \x { (- (((f0))) x) };
+    let f2 f1;
+    (printf "%ld\n" (f2 124));
     0
 }
