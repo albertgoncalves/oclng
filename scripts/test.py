@@ -16,6 +16,9 @@ class Tests(TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.decode(), f"{expected}\n")
 
+    def test_collatz(self):
+        self.into_test("collatz", "3,10,5,16,8,4,2,1")
+
     def test_early_return(self):
         self.into_test("early_return", "returned early")
 
@@ -27,6 +30,9 @@ class Tests(TestCase):
 
     def test_function_pointer(self):
         self.into_test("function_pointer", -123)
+
+    def test_imod(self):
+        self.into_test("imod", "6\n1")
 
 
 if __name__ == "__main__":

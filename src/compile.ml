@@ -28,6 +28,10 @@ type inst =
   | InstMov of (op * op)
   | InstAdd of (op * op)
   | InstSub of (op * op)
+  | InstIMul of (op * op)
+  | InstIDiv of op
+  | InstCmovns of (op * op)
+  | InstCqo
   | InstAnd of (op * op)
   | InstXor of (op * op)
   | InstLabel of string
@@ -110,6 +114,11 @@ let show_inst : inst -> string =
   | InstMov (l, r) -> Printf.sprintf "\tmov %s, %s\n" (show_op l) (show_op r)
   | InstAdd (l, r) -> Printf.sprintf "\tadd %s, %s\n" (show_op l) (show_op r)
   | InstSub (l, r) -> Printf.sprintf "\tsub %s, %s\n" (show_op l) (show_op r)
+  | InstIMul (l, r) -> Printf.sprintf "\timul %s, %s\n" (show_op l) (show_op r)
+  | InstIDiv op -> Printf.sprintf "\tidiv %s\n" (show_op op)
+  | InstCmovns (l, r) ->
+    Printf.sprintf "\tcmovns %s, %s\n" (show_op l) (show_op r)
+  | InstCqo -> "\tcqo\n"
   | InstAnd (l, r) -> Printf.sprintf "\tand %s, %s\n" (show_op l) (show_op r)
   | InstXor (l, r) -> Printf.sprintf "\txor %s, %s\n" (show_op l) (show_op r)
   | InstLabel label -> Printf.sprintf "%s:\n" label
@@ -224,7 +233,7 @@ and compile_call_args (regs : reg list) : expr_pos list -> unit =
 
 and compile_call_label (label : string) (args : expr_pos list) : unit =
   match label with
-  | "=" | "+" | "-" ->
+  | "=" | "+" | "-" | "*" ->
     (match args with
      | [l; r] ->
        (
@@ -245,8 +254,47 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
               ]
             | "+" -> [InstAdd (OpReg RegR10, OpReg RegR11)]
             | "-" -> [InstSub (OpReg RegR10, OpReg RegR11)]
+            | "*" -> [InstIMul (OpReg RegR10, OpReg RegR11)]
             | _ -> assert false);
          append_inst (InstPush (OpReg RegR10));
+         context.stack <- context.stack - 1
+       )
+     | _ -> assert false)
+  | "/" ->
+    (match args with
+     | [l; r] ->
+       (
+         compile_expr l;
+         compile_expr r;
+         append_insts
+           [
+             InstPop (OpReg RegR11);
+             InstPop (OpReg RegRax);
+             InstCqo;
+             InstIDiv (OpReg RegR11);
+             InstPush (OpReg RegRax);
+           ];
+         context.stack <- context.stack - 1
+       )
+     | _ -> assert false)
+  | "%" ->
+    (match args with
+     | [l; r] ->
+       (
+         compile_expr l;
+         compile_expr r;
+         append_insts
+           [
+             InstPop (OpReg RegR11);
+             InstPop (OpReg RegRax);
+             InstMov (OpReg RegR10, OpReg RegR11);
+             InstMov (OpReg RegRcx, OpImm 0);
+             InstCqo;
+             InstIDiv (OpReg RegR11);
+             InstCmovns (OpReg RegR10, OpReg RegRcx);
+             InstAdd (OpReg RegR10, OpReg RegRdx);
+             InstPush (OpReg RegR10);
+           ];
          context.stack <- context.stack - 1
        )
      | _ -> assert false)
