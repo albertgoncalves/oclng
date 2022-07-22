@@ -143,10 +143,10 @@ let append_var (var : string) : unit =
   assert (not (Hashtbl.mem context.vars var));
   Hashtbl.add context.vars var context.stack
 
-let rec compile_func_args (regs : reg list) : string list -> unit =
+let rec compile_func_args (regs : reg list) : string_pos list -> unit =
   function
   | [] -> ()
-  | arg :: args ->
+  | (arg, _) :: args ->
     (match regs with
      | [] -> assert false
      | reg :: regs ->
@@ -157,14 +157,14 @@ let rec compile_func_args (regs : reg list) : string list -> unit =
          compile_func_args regs args
        ))
 
-let rec compile_expr : expr -> unit =
+let rec compile_expr : expr_pos -> unit =
   function
-  | ExprInt n ->
+  | (ExprInt n, _) ->
     (
       append_inst (InstPush (OpImm n));
       context.stack <- context.stack + 1
     )
-  | ExprStr str ->
+  | (ExprStr str, _) ->
     (
       let label : string =
         match Hashtbl.find_opt context.strings str with
@@ -178,13 +178,13 @@ let rec compile_expr : expr -> unit =
       append_inst (InstPush (OpLabel label));
       context.stack <- context.stack + 1
     )
-  | ExprFn func ->
+  | (ExprFn func, _) ->
     (
       Queue.add func context.funcs;
-      append_inst (InstPush (OpLabel func.label));
+      append_inst (InstPush (OpLabel (fst func.label)));
       context.stack <- context.stack + 1
     )
-  | ExprVar var ->
+  | (ExprVar var, _) ->
     (
       append_inst
         (match Hashtbl.find_opt context.vars var with
@@ -192,8 +192,8 @@ let rec compile_expr : expr -> unit =
          | None -> InstPush (OpLabel var));
       context.stack <- context.stack + 1
     )
-  | ExprCall (ExprVar label, args) -> compile_call_label label args
-  | ExprCall (expr, args) ->
+  | (ExprCall ((ExprVar label, _), args), _) -> compile_call_label label args
+  | (ExprCall (expr, args), _) ->
     (
       compile_call_args arg_regs args;
       compile_expr expr;
@@ -206,9 +206,9 @@ let rec compile_expr : expr -> unit =
         ];
       context.stack <- context.stack + 1
     )
-  | ExprSwitch (expr, branches) -> compile_switch expr branches
+  | (ExprSwitch (expr, branches), _) -> compile_switch expr branches
 
-and compile_call_args (regs : reg list) : expr list -> unit =
+and compile_call_args (regs : reg list) : expr_pos list -> unit =
   function
   | [] -> ()
   | expr :: exprs ->
@@ -222,7 +222,7 @@ and compile_call_args (regs : reg list) : expr list -> unit =
          context.stack <- context.stack - 1;
        ))
 
-and compile_call_label (label : string) (args : expr list) : unit =
+and compile_call_label (label : string) (args : expr_pos list) : unit =
   match label with
   | "=" | "+" | "-" ->
     (match args with
@@ -280,7 +280,7 @@ and compile_branch
     (base : int)
     (vars : string list)
     (label_end : string)
-    (stmts : stmt list) : (string * bool) =
+    (stmts : stmt_pos list) : (string * bool) =
   let label_branch : string = Printf.sprintf "_branch_%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
   context.base <- context.stack;
@@ -306,7 +306,7 @@ and compile_branch
     );
   (label_branch, returned)
 
-and compile_switch (expr : expr) (branches : stmt list list) : unit =
+and compile_switch (expr : expr_pos) (branches : stmt_pos list list) : unit =
   let label_table : string = Printf.sprintf "_table_%d_" (get_k ()) in
   let label_end : string = Printf.sprintf "_end_%d_" (get_k ()) in
   compile_expr expr;
@@ -330,7 +330,7 @@ and compile_switch (expr : expr) (branches : stmt list list) : unit =
   );
   Queue.add (label_table, label_branches) context.tables
 
-and compile_return (expr : expr) : unit =
+and compile_return (expr : expr_pos) : unit =
   compile_expr expr;
   append_inst (InstPop (OpReg RegRax));
   context.stack <- context.stack - 1;
@@ -339,26 +339,28 @@ and compile_return (expr : expr) : unit =
   );
   append_inst InstRet
 
-and compile_stmt : stmt -> unit =
+and compile_stmt : stmt_pos -> unit =
   function
-  | StmtHold expr -> compile_expr expr
-  | StmtDrop expr ->
+  | (StmtHold expr, _) -> compile_expr expr
+  | (StmtDrop expr, _) ->
     (
       compile_expr expr;
       append_inst (InstDrop 1);
       context.stack <- context.stack - 1
     )
-  | StmtLet (_, ExprFn _) -> assert false
-  | StmtLet (var, expr) ->
+  | (StmtLet (_, (ExprFn _, _)), _) -> assert false
+  | (StmtLet (var, expr), _) ->
     (
       compile_expr expr;
       append_var var
     )
-  | StmtReturn (ExprCall (ExprVar "=", _) as expr)
-  | StmtReturn (ExprCall (ExprVar "+", _) as expr)
-  | StmtReturn (ExprCall (ExprVar "-", _) as expr) -> compile_return expr
-  | StmtReturn (ExprSwitch (expr, branches)) -> compile_switch expr branches
-  | StmtReturn (ExprCall (ExprVar label, args)) ->
+  | (StmtReturn ((ExprCall ((ExprVar "=", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "+", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "-", _), _), _) as expr), _) ->
+    compile_return expr
+  | (StmtReturn (ExprSwitch (expr, branches), _), _) ->
+    compile_switch expr branches
+  | (StmtReturn (ExprCall ((ExprVar label, _), args), _), _) ->
     (
       compile_call_args arg_regs args;
       match Hashtbl.find_opt context.vars label with
@@ -378,7 +380,7 @@ and compile_stmt : stmt -> unit =
           append_inst (InstJmp (OpReg RegR10))
         )
     )
-  | StmtReturn (ExprCall (expr, args)) ->
+  | (StmtReturn (ExprCall (expr, args), _), _) ->
     (
       compile_call_args arg_regs args;
       compile_expr expr;
@@ -389,17 +391,17 @@ and compile_stmt : stmt -> unit =
       );
       append_inst (InstJmp (OpReg RegR10))
     )
-  | StmtReturn expr -> compile_return expr
+  | (StmtReturn expr, _) -> compile_return expr
 
-and compile_stmts : stmt list -> bool =
+and compile_stmts : stmt_pos list -> bool =
   function
   | [] -> false
-  | [StmtReturn _ as stmt] ->
+  | [(StmtReturn _, _) as stmt] ->
     (
       compile_stmt stmt;
       true
     )
-  | StmtReturn _ :: _ -> assert false
+  | (StmtReturn _, _) :: _ -> assert false
   | stmt :: rest ->
     (
       compile_stmt stmt;
@@ -410,10 +412,10 @@ let compile_func (func : func) : unit =
   Printf.fprintf stderr "%s\n" (show_func func);
   context.stack <- 0;
   Hashtbl.clear context.vars;
-  if func.label = "_entry_" then (
+  if (fst func.label) = "_entry_" then (
     context.has_entry <- true
   );
-  append_inst (InstLabel func.label);
+  append_inst (InstLabel (fst func.label));
   compile_func_args arg_regs func.args;
   assert (compile_stmts func.body)
 
