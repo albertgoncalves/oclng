@@ -131,8 +131,10 @@ let append_insts : inst list -> unit =
 let get_var (n : int) : op =
   OpDerefRegOffset (RegRsp, context.stack - n)
 
-let compile_string (str : string) (label : string) : string =
-  Printf.sprintf "\t%s db %s,0\n" label (show_string str)
+let compile_string (label : string) : string -> string =
+  function
+  | "" -> Printf.sprintf "\t%s db 0\n" label
+  | s -> Printf.sprintf "\t%s db %s,0\n" label (show_string s)
 
 let compile_table ((table, branches) : (string * string list)) : string =
   Printf.sprintf "\t%s dq %s\n" table (String.concat "," branches)
@@ -456,7 +458,7 @@ let compile (funcs : func Queue.t) : Buffer.t =
   then (
     Buffer.add_string buffer "section '.rodata'\n";
     Hashtbl.iter
-      (fun k v -> Buffer.add_string buffer (compile_string k v))
+      (fun k v -> Buffer.add_string buffer (compile_string v k))
       context.strings;
     Queue.iter
       (fun t -> Buffer.add_string buffer (compile_table t))
