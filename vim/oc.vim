@@ -19,9 +19,12 @@ hi def link ocSpecial SpecialChar
 syn keyword Statement
     \ return
     \ let
+    \ set
     \ switch
 syn keyword Function
     \ entry
     \ printf
+    \ alloc
+    \ get
 
 let b:current_syntax = "oc"

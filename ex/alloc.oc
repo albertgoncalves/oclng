@@ -1,0 +1,14 @@
+entry {
+    # x = &[-123, 4567 * 3]
+    let x (alloc 2);
+    set x 0 (- 0 123);
+    set x 1 (* 4567 3);
+
+    # y = &[&[-1]]
+    let y (alloc 1);
+    set y 0 (alloc 1);
+    set (get y 0) 0 (- 0 1);
+
+    (printf "%ld %ld %ld\n" (get x 1) (get x 0) (get (get y 0) 0));
+    0
+}

@@ -3,6 +3,7 @@ type stmt =
   | StmtHold of expr_pos
   | StmtReturn of expr_pos
   | StmtLet of (string * expr_pos)
+  | StmtSet of (expr_pos * int * expr_pos)
 
 and expr =
   | ExprInt of int
@@ -80,6 +81,8 @@ and show_stmt : stmt_pos -> string =
   | (StmtReturn expr, _) -> Printf.sprintf "return %s" (show_expr expr)
   | (StmtLet (label, expr), _) ->
     Printf.sprintf "let %s %s" label (show_expr expr)
+  | (StmtSet (var, offset, value), _) ->
+    Printf.sprintf "set %s %d %s" (show_expr var) offset (show_expr value)
 
 let show_func (func : func) : string =
   Printf.sprintf

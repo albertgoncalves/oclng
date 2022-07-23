@@ -320,6 +320,30 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          context.stack <- context.stack - 1
        )
      | _ -> assert false)
+  | "alloc" ->
+    (match args with
+     | [(ExprInt n, _)] ->
+       append_insts
+         [
+           InstMov (OpReg RegRdi, OpImm (n * 8));
+           InstCall (OpLabel "alloc");
+           InstPush (OpReg RegRax);
+         ];
+       context.stack <- context.stack + 1;
+       Hashtbl.replace context.externs "alloc" ()
+     | _ -> assert false)
+  | "get" ->
+    (match args with
+     | [expr; (ExprInt offset, _)] ->
+       (
+         compile_expr expr;
+         append_insts
+           [
+             InstPop (OpReg RegR11);
+             InstPush (OpDerefRegOffset (RegR11, offset));
+           ]
+       )
+     | _ -> assert false)
   | "printf" ->
     (
       compile_call_args arg_regs args;
@@ -423,6 +447,18 @@ and compile_stmt : stmt_pos -> unit =
     (
       compile_expr expr;
       append_var var
+    )
+  | (StmtSet (var, offset, value), _) ->
+    (
+      compile_expr var;
+      compile_expr value;
+      append_insts
+        [
+          InstPop (OpReg RegR11);
+          InstPop (OpReg RegR10);
+          InstMov (OpDerefRegOffset (RegR10, offset), OpReg RegR11);
+        ];
+      context.stack <- context.stack - 2
     )
   | (StmtReturn ((ExprCall ((ExprVar "=", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "+", _), _), _) as expr), _)

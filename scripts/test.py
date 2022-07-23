@@ -16,6 +16,9 @@ class Tests(TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.decode(), f"{expected}\n")
 
+    def test_alloc(self):
+        self.into_test("alloc", "13701 -123 -1")
+
     def test_collatz(self):
         self.into_test("collatz", "3,10,5,16,8,4,2,1")
 
