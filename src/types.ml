@@ -19,11 +19,11 @@ and func =
     body : stmt_pos list;
   }
 
-and stmt_pos = (stmt * int)
+and stmt_pos = (stmt * Io.position)
 
-and expr_pos = (expr * int)
+and expr_pos = (expr * Io.position)
 
-and string_pos = (string * int)
+and string_pos = (string * Io.position)
 
 let encode (chars : char list) : string =
   let rec f (prev : char list) : char list -> char list =

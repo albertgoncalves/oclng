@@ -16,7 +16,7 @@ type token =
   | TokenIdent of string
   | TokenStr of string
 
-type token_pos = token * int
+type token_pos = token * Io.position
 
 let show_token : token -> string =
   function
@@ -53,16 +53,16 @@ let get_k () : int =
 let peek (tokens : token_pos Queue.t) : token_pos =
   match Queue.peek_opt tokens with
   | Some token -> token
-  | None -> Io.exit_at (Io.context.len - 1)
+  | None -> Io.exit_at (Io.position_at (Io.context.len - 1))
 
 let pop (tokens : token_pos Queue.t) : token_pos =
   match Queue.take_opt tokens with
   | Some token -> token
-  | None -> Io.exit_at (Io.context.len - 1)
+  | None -> Io.exit_at (Io.position_at (Io.context.len - 1))
 
 let at_index (i : int) : char =
   if Io.context.len <= i then (
-    Io.exit_at (Io.context.len - 1)
+    Io.exit_at (Io.position_at (Io.context.len - 1))
   );
   Bytes.get Io.context.source i
 
@@ -76,43 +76,43 @@ let is_space : char -> bool =
   | '\n' | '\t' | ' ' -> true
   | _ -> false
 
-let into_token : (string * int) -> token_pos =
+let into_token : (string * Io.position) -> token_pos =
   function
-  | ("(", offset) -> (TokenLParen, offset)
-  | (")", offset) -> (TokenRParen, offset)
-  | ("{", offset) -> (TokenLBrace, offset)
-  | ("}", offset) -> (TokenRBrace, offset)
-  | (";", offset) -> (TokenSemiC, offset)
-  | ("\\", offset) -> (TokenSlash, offset)
+  | ("(", position) -> (TokenLParen, position)
+  | (")", position) -> (TokenRParen, position)
+  | ("{", position) -> (TokenLBrace, position)
+  | ("}", position) -> (TokenRBrace, position)
+  | (";", position) -> (TokenSemiC, position)
+  | ("\\", position) -> (TokenSlash, position)
 
-  | ("return", offset) -> (TokenReturn, offset)
-  | ("let", offset) -> (TokenLet, offset)
-  | ("switch", offset) -> (TokenSwitch, offset)
+  | ("return", position) -> (TokenReturn, position)
+  | ("let", position) -> (TokenLet, position)
+  | ("switch", position) -> (TokenSwitch, position)
 
-  | ("entry", offset) -> (TokenIdent "_entry_", offset)
-  | ("loop", offset) -> (TokenIdent "_loop_", offset)
+  | ("entry", position) -> (TokenIdent "_entry_", position)
+  | ("loop", position) -> (TokenIdent "_loop_", position)
 
-  | (cs, offset) ->
+  | (cs, position) ->
     (
       assert ((String.length cs) <> 0);
       if String.for_all is_digit cs then
-        (TokenInt (int_of_string cs), offset)
+        (TokenInt (int_of_string cs), position)
       else
         let n : int = String.length cs in
         if (cs.[0] = '"') && (cs.[n - 1] = '"') then (
-          (TokenStr (String.sub cs 1 (n - 2)), offset)
+          (TokenStr (String.sub cs 1 (n - 2)), position)
         ) else (
           assert (not (String.exists is_space cs));
           if not (cs.[0] <> '_' || cs.[n - 1] <> '_' || cs = "_") then (
-            Io.exit_at offset
+            Io.exit_at position
           );
-          (TokenIdent cs, offset)
+          (TokenIdent cs, position)
         )
     )
 
 let tokenize () : token_pos Queue.t =
-  let n : int = Bytes.length Io.context.source in
-  let tokens : (string * int) Queue.t = Queue.create () in
+  let n : int = Io.context.len in
+  let tokens : string_pos Queue.t = Queue.create () in
   let rec loop_string (buffer : Buffer.t) (i : int) : int =
     match at_index i with
     | '\\' -> loop_string_escaped buffer (i + 1)
@@ -143,12 +143,14 @@ let tokenize () : token_pos Queue.t =
         Buffer.add_char buffer '\\';
         loop_string buffer (i + 1)
       )
-    | _ -> Io.exit_at i in
+    | _ -> Io.exit_at (Io.position_at i) in
   let rec loop_token (l : int) (r : int) : unit =
     if l = n then
       ()
     else if r = n then
-      Queue.add (Bytes.sub_string Io.context.source l (r - l), l) tokens
+      Queue.add
+        (Bytes.sub_string Io.context.source l (r - l), Io.position_at l)
+        tokens
     else
       match at_index r with
       | '#' -> loop_comment (r + 1)
@@ -157,13 +159,15 @@ let tokenize () : token_pos Queue.t =
           let buffer : Buffer.t = Buffer.create 32 in
           Buffer.add_char buffer '"';
           let r : int = loop_string buffer (r + 1) in
-          Queue.add (Buffer.contents buffer, l) tokens;
+          Queue.add (Buffer.contents buffer, Io.position_at l) tokens;
           loop_token r r
         )
       | '\n' | '\t' | ' ' ->
         (
           if l <> r then (
-            Queue.add (Bytes.sub_string Io.context.source l (r - l), l) tokens
+            Queue.add
+              (Bytes.sub_string Io.context.source l (r - l), Io.position_at l)
+              tokens
           );
           let r : int = r + 1 in
           loop_token r r
@@ -171,9 +175,13 @@ let tokenize () : token_pos Queue.t =
       | '(' | ')' | '{' | '}' | ';' | '\\' ->
         (
           if l <> r then (
-            Queue.add (Bytes.sub_string Io.context.source l (r - l), l) tokens
+            Queue.add
+              (Bytes.sub_string Io.context.source l (r - l), Io.position_at l)
+              tokens
           );
-          Queue.add (Bytes.sub_string Io.context.source r 1, r) tokens;
+          Queue.add
+            (Bytes.sub_string Io.context.source r 1, Io.position_at r)
+            tokens;
           let r : int = r + 1 in
           loop_token r r
         )
@@ -195,37 +203,37 @@ let tokenize () : token_pos Queue.t =
 let rec return_last (prev : stmt_pos list) : stmt_pos list -> stmt_pos list =
   function
   | [] -> List.rev prev
-  | (StmtReturn (ExprSwitch (expr, branches), o0), o1) :: rest ->
+  | (StmtReturn (ExprSwitch (expr, branches), p0), p1) :: rest ->
     return_last
       (
         (
           StmtReturn
-            (ExprSwitch (expr, List.map (return_last []) branches), o0),
-          o1
+            (ExprSwitch (expr, List.map (return_last []) branches), p0),
+          p1
         ) :: prev
       )
       rest
-  | [(StmtHold (ExprSwitch (expr, branches), o0), o1)] ->
+  | [(StmtHold (ExprSwitch (expr, branches), p0), p1)] ->
     return_last
       (
         (
           StmtReturn
-            (ExprSwitch (expr, List.map (return_last []) branches), o0),
-          o1
+            (ExprSwitch (expr, List.map (return_last []) branches), p0),
+          p1
         ) :: prev
       )
       []
-  | [(StmtHold expr, offset)] ->
-    return_last ((StmtReturn expr, offset) :: prev) []
+  | [(StmtHold expr, position)] ->
+    return_last ((StmtReturn expr, position) :: prev) []
   | stmt :: stmts -> return_last (stmt :: prev) stmts
 
 let rec parse_args
     (prev : string_pos list)
     (tokens : token_pos Queue.t) : string_pos list =
   match peek tokens with
-  | (TokenIdent x, offset) ->
+  | (TokenIdent x, position) ->
     let _ : token_pos = pop tokens in
-    parse_args ((x, offset) :: prev) tokens
+    parse_args ((x, position) :: prev) tokens
   | _ -> List.rev prev
 
 let parse_block
@@ -236,17 +244,17 @@ let parse_block
     let x : 'a = f tokens in
     (match pop tokens with
      | (TokenRBrace, _) -> x
-     | (_, offset) -> Io.exit_at offset)
-  | (_, offset) -> Io.exit_at offset
+     | (_, position) -> Io.exit_at position)
+  | (_, position) -> Io.exit_at position
 
 let rec resolve_expr
     (mapping : (string, string) Hashtbl.t) : expr_pos -> expr_pos =
   function
-  | (ExprVar var, offset) ->
+  | (ExprVar var, position) ->
     (match Hashtbl.find_opt mapping var with
-     | Some label -> (ExprVar label, offset)
-     | None -> (ExprVar var, offset))
-  | (ExprFn func, offset) ->
+     | Some label -> (ExprVar label, position)
+     | None -> (ExprVar var, position))
+  | (ExprFn func, position) ->
     (
       ExprFn
         {
@@ -254,22 +262,22 @@ let rec resolve_expr
           args = func.args;
           body = resolve_stmts (Hashtbl.copy mapping) func.body;
         },
-      offset
+      position
     )
-  | (ExprSwitch (expr, branches), offset) ->
+  | (ExprSwitch (expr, branches), position) ->
     (
       ExprSwitch
         (
           resolve_expr mapping expr,
           List.map (resolve_stmts (Hashtbl.copy mapping)) branches
         ),
-      offset
+      position
     )
-  | (ExprCall (expr, args), offset) ->
+  | (ExprCall (expr, args), position) ->
     (
       ExprCall
         (resolve_expr mapping expr, List.map (resolve_expr mapping) args),
-      offset
+      position
     )
   | expr -> expr
 
@@ -277,40 +285,41 @@ and resolve_stmts
     (mapping : (string, string) Hashtbl.t) : stmt_pos list -> stmt_pos list =
   function
   | [] -> []
-  | (StmtLet (var, ((ExprFn func, _) as expr)), offset) :: rest ->
+  | (StmtLet (var, ((ExprFn func, _) as expr)), position) :: rest ->
     (
       Hashtbl.add mapping var (fst func.label);
       let rest : stmt_pos list = resolve_stmts mapping rest in
-      (StmtDrop (resolve_expr mapping expr), offset) :: rest
+      (StmtDrop (resolve_expr mapping expr), position) :: rest
     )
-  | (StmtLet (var, expr), offset) :: rest ->
-    (StmtLet (var, resolve_expr mapping expr), offset) ::
+  | (StmtLet (var, expr), position) :: rest ->
+    (StmtLet (var, resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
-  | (StmtDrop expr, offset) :: rest ->
-    (StmtDrop (resolve_expr mapping expr), offset) ::
+  | (StmtDrop expr, position) :: rest ->
+    (StmtDrop (resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
-  | (StmtHold expr, offset) :: rest ->
-    (StmtHold (resolve_expr mapping expr), offset) ::
+  | (StmtHold expr, position) :: rest ->
+    (StmtHold (resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
-  | (StmtReturn expr, offset) :: rest ->
-    (StmtReturn (resolve_expr mapping expr), offset) ::
+  | (StmtReturn expr, position) :: rest ->
+    (StmtReturn (resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
 
-let rec parse_expr (tokens : token_pos Queue.t) : (expr_pos, int) result =
+let rec parse_expr
+    (tokens : token_pos Queue.t) : (expr_pos, Io.position) result =
   match peek tokens with
-  | (TokenInt x, offset) ->
+  | (TokenInt x, position) ->
     let _ : token_pos = pop tokens in
-    Ok (ExprInt x, offset)
-  | (TokenIdent x, offset) ->
+    Ok (ExprInt x, position)
+  | (TokenIdent x, position) ->
     let _ : token_pos = pop tokens in
-    Ok (ExprVar x, offset)
-  | (TokenStr x, offset) ->
+    Ok (ExprVar x, position)
+  | (TokenStr x, position) ->
     let _ : token_pos = pop tokens in
-    Ok (ExprStr x, offset)
+    Ok (ExprStr x, position)
   | (TokenLParen, _) -> Ok (parse_call tokens)
   | (TokenSwitch, _) -> Ok (parse_switch tokens)
   | (TokenSlash, _) -> Ok (parse_fn tokens)
-  | (_, offset) -> Error offset
+  | (_, position) -> Error position
 
 and parse_exprs
     (prev : expr_pos list)
@@ -320,19 +329,19 @@ and parse_exprs
   | Ok expr -> parse_exprs (expr :: prev) tokens
 
 and parse_call (tokens : token_pos Queue.t) : expr_pos =
-  let offset : int =
+  let position : Io.position =
     match pop tokens with
-    | (TokenLParen, offset) -> offset
-    | (_, offset) -> Io.exit_at offset in
+    | (TokenLParen, position) -> position
+    | (_, position) -> Io.exit_at position in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok expr -> expr
-    | Error offset -> Io.exit_at offset in
+    | Error position -> Io.exit_at position in
   let args : expr_pos list = parse_exprs [] tokens in
   (match pop tokens with
    | (TokenRParen, _) -> ()
-   | (_, offset) -> Io.exit_at offset);
-  (ExprCall (expr, args), offset)
+   | (_, position) -> Io.exit_at position);
+  (ExprCall (expr, args), position)
 
 and parse_branch
     (prev : stmt_pos list list)
@@ -343,50 +352,50 @@ and parse_branch
   | _ -> List.rev prev
 
 and parse_switch (tokens : token_pos Queue.t) : expr_pos =
-  let o0 : int =
+  let p0 : Io.position =
     match pop tokens with
-    | (TokenSwitch, offset) -> offset
-    | (_, offset) -> Io.exit_at offset in
+    | (TokenSwitch, position) -> position
+    | (_, position) -> Io.exit_at position in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok expr -> expr
-    | Error offset -> Io.exit_at offset in
-  let (_, o1) : token_pos = peek tokens in
+    | Error position -> Io.exit_at position in
+  let (_, p1) : token_pos = peek tokens in
   let branches : stmt_pos list list = parse_branch [] tokens in
   if List.length branches = 0 then (
-    Io.exit_at o1
+    Io.exit_at p1
   );
-  (ExprSwitch (expr, branches), o0)
+  (ExprSwitch (expr, branches), p0)
 
 and parse_fn (tokens : token_pos Queue.t) : expr_pos =
-  let offset : int =
+  let position : Io.position =
     match pop tokens with
-    | (TokenSlash, offset) -> offset
-    | (_, offset) -> Io.exit_at offset in
+    | (TokenSlash, position) -> position
+    | (_, position) -> Io.exit_at position in
   let args : string_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
-  (ExprFn { label = (label, offset); args; body }, offset)
+  (ExprFn { label = (label, position); args; body }, position)
 
-and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, int) result =
+and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   match peek tokens with
-  | (TokenReturn, offset) ->
+  | (TokenReturn, position) ->
     let _ : token_pos = pop tokens in
     (match parse_expr tokens with
-     | Ok expr -> Ok (StmtReturn expr, offset)
+     | Ok expr -> Ok (StmtReturn expr, position)
      | Error _ as error -> error)
   | (TokenLet, _) -> Ok (parse_let tokens)
-  | (_, offset) ->
+  | (_, position) ->
     match parse_expr tokens with
-    | Ok expr -> Ok (StmtDrop expr, offset)
+    | Ok expr -> Ok (StmtDrop expr, position)
     | Error _ as error -> error
 
 and parse_stmts
     (prev : stmt_pos list)
     (tokens : token_pos Queue.t) : stmt_pos list =
   match parse_stmt tokens with
-  | Error offset -> Io.exit_at offset
+  | Error position -> Io.exit_at position
   | Ok stmt ->
     match peek tokens with
     | (TokenSemiC, _) ->
@@ -396,47 +405,48 @@ and parse_stmts
       )
     | _ ->
       match stmt with
-      | (StmtDrop expr, offset) -> List.rev ((StmtHold expr, offset) :: prev)
+      | (StmtDrop expr, position) ->
+        List.rev ((StmtHold expr, position) :: prev)
       | (StmtReturn _, _) -> List.rev (stmt :: prev)
-      | (_, offset) -> Io.exit_at offset
+      | (_, position) -> Io.exit_at position
 
 and parse_let (tokens : token_pos Queue.t) : stmt_pos =
-  let offset : int =
+  let position : Io.position =
     match pop tokens with
-    | (TokenLet, offset) -> offset
-    | (_, offset) -> Io.exit_at offset in
+    | (TokenLet, position) -> position
+    | (_, position) -> Io.exit_at position in
   let var : string =
     match pop tokens with
     | (TokenIdent x, _) -> x
-    | (_, offset) -> Io.exit_at offset in
+    | (_, position) -> Io.exit_at position in
   let expr : expr_pos =
     match parse_expr tokens with
-    | Ok (ExprFn func, offset) ->
+    | Ok (ExprFn func, position) ->
       (
         ExprFn
           {
-            label = (Printf.sprintf "_%s_%d_" var (get_k ()), offset);
+            label = (Printf.sprintf "_%s_%d_" var (get_k ()), position);
             args = func.args;
             body = func.body
           },
-        offset
+        position
       )
     | Ok expr -> expr
-    | Error offset -> Io.exit_at offset in
-  (StmtLet (var, expr), offset)
+    | Error position -> Io.exit_at position in
+  (StmtLet (var, expr), position)
 
 let parse_func (tokens : token_pos Queue.t) : func =
-  let (label, offset) : string_pos =
+  let (label, position) : string_pos =
     match pop tokens with
-    | (TokenIdent x, offset) -> (x, offset)
-    | (_, offset) -> Io.exit_at offset in
+    | (TokenIdent x, position) -> (x, position)
+    | (_, position) -> Io.exit_at position in
   let args : string_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     parse_stmts []
     |> parse_block tokens
     |> return_last []
     |> resolve_stmts (Hashtbl.create 16) in
-  { label = (label, offset); args; body; }
+  { label = (label, position); args; body; }
 
 let parse (tokens : token_pos Queue.t) : func Queue.t =
   let funcs : func Queue.t = Queue.create () in
