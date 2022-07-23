@@ -31,6 +31,7 @@ type inst =
   | InstIMul of (op * op)
   | InstIDiv of op
   | InstCmovns of (op * op)
+  | InstCmovz of (op * op)
   | InstCqo
   | InstAnd of (op * op)
   | InstXor of (op * op)
@@ -38,7 +39,9 @@ type inst =
   | InstCall of op
   | InstJmp of op
   | InstCmp of (op * op)
+  | InstTest of (op * op)
   | InstSete of op
+  | InstSets of op
   | InstRet
 
 type context =
@@ -118,6 +121,8 @@ let show_inst : inst -> string =
   | InstIDiv op -> Printf.sprintf "\tidiv %s\n" (show_op op)
   | InstCmovns (l, r) ->
     Printf.sprintf "\tcmovns %s, %s\n" (show_op l) (show_op r)
+  | InstCmovz (l, r) ->
+    Printf.sprintf "\tcmovz %s, %s\n" (show_op l) (show_op r)
   | InstCqo -> "\tcqo\n"
   | InstAnd (l, r) -> Printf.sprintf "\tand %s, %s\n" (show_op l) (show_op r)
   | InstXor (l, r) -> Printf.sprintf "\txor %s, %s\n" (show_op l) (show_op r)
@@ -125,7 +130,9 @@ let show_inst : inst -> string =
   | InstCall op -> Printf.sprintf "\tcall %s\n" (show_op op)
   | InstJmp op -> Printf.sprintf "\tjmp %s\n" (show_op op)
   | InstCmp (l, r) -> Printf.sprintf "\tcmp %s, %s\n" (show_op l) (show_op r)
+  | InstTest (l, r) -> Printf.sprintf "\ttest %s, %s\n" (show_op l) (show_op r)
   | InstSete op -> Printf.sprintf "\tsete %s\n" (show_op op)
+  | InstSets op -> Printf.sprintf "\tsets %s\n" (show_op op)
   | InstRet -> "\tret\n"
 
 let string_label : int -> string =
@@ -268,10 +275,19 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          compile_expr r;
          append_insts
            [
+             InstXor (OpReg RegR10, OpReg RegR10);
+
              InstPop (OpReg RegR11);
              InstPop (OpReg RegRax);
              InstCqo;
              InstIDiv (OpReg RegR11);
+
+             InstTest (OpReg RegRax, OpReg RegRax);
+             InstSets (OpReg RegR10b);
+             InstTest (OpReg RegRdx, OpReg RegRdx);
+             InstCmovz (OpReg RegR10, OpReg RegRdx);
+             InstSub (OpReg RegRax, OpReg RegR10);
+
              InstPush (OpReg RegRax);
            ];
          context.stack <- context.stack - 1
@@ -285,15 +301,21 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          compile_expr r;
          append_insts
            [
+             InstXor (OpReg RegRcx, OpReg RegRcx);
+
              InstPop (OpReg RegR11);
              InstPop (OpReg RegRax);
              InstMov (OpReg RegR10, OpReg RegR11);
-             InstMov (OpReg RegRcx, OpImm 0);
              InstCqo;
              InstIDiv (OpReg RegR11);
+
+             InstTest (OpReg RegRax, OpReg RegRax);
              InstCmovns (OpReg RegR10, OpReg RegRcx);
-             InstAdd (OpReg RegR10, OpReg RegRdx);
-             InstPush (OpReg RegR10);
+             InstTest (OpReg RegRdx, OpReg RegRdx);
+             InstCmovz (OpReg RegR10, OpReg RegRcx);
+             InstAdd (OpReg RegRdx, OpReg RegR10);
+
+             InstPush (OpReg RegRdx);
            ];
          context.stack <- context.stack - 1
        )

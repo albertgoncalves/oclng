@@ -19,6 +19,22 @@ class Tests(TestCase):
     def test_collatz(self):
         self.into_test("collatz", "3,10,5,16,8,4,2,1")
 
+    def test_divmod(self):
+        self.into_test("divmod", "\n".join([
+            "2,2",
+            "-3,14",
+            "-3,-14",
+            "2,-2",
+            "2,0",
+            "-2,0",
+            "-2,0",
+            "2,0",
+            "1,16",
+            "-2,2",
+            "-2,-2",
+            "1,-16",
+        ]))
+
     def test_early_return(self):
         self.into_test("early_return", "returned early")
 
@@ -30,9 +46,6 @@ class Tests(TestCase):
 
     def test_function_pointer(self):
         self.into_test("function_pointer", -123)
-
-    def test_imod(self):
-        self.into_test("imod", "6\n1")
 
 
 if __name__ == "__main__":
