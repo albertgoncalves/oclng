@@ -1,12 +1,15 @@
 entry {
-    # x = &[-123, 4567 * 3]
+    # u64* x = ...;
     let x (alloc 2);
+    # x[0] = -123;
     seta x 0 (- 0 123);
+    # x[1] = 4567 * 3
     seta x 1 (* 4567 3);
 
-    # y = &[&[-1]]
+    # u64** y = ...;
     let y (alloc 1);
     seta y 0 (alloc 1);
+    # y[0][0] = -1;
     seta (get y 0) 0 (- 0 1);
 
     (printf "%ld %ld %ld\n" (get x 1) (get x 0) (get (get y 0) 0));
