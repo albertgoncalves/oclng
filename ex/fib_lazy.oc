@@ -1,0 +1,50 @@
+list h f x {
+    let l (alloc 4);
+    set l 0 0;
+    set l 1 h;
+    set l 2 f;
+    set l 3 x;
+    l
+}
+
+head l {
+    (get l 1)
+}
+
+tail l {
+    switch (get l 0) {
+        let x ((get l 2) (get l 3));
+        set l 0 1;
+        set l 3 x;
+        x
+    } {
+        (get l 3)
+    }
+}
+
+drop n l {
+    switch (= n 0) {
+        (drop (- n 1) (tail l))
+    } {
+        l
+    }
+}
+
+zip_with l0 l1 {
+    let pair (alloc 2);
+    set pair 0 l0;
+    set pair 1 l1;
+    (list
+        (+ (head l0) (head l1))
+        \pair {
+            (zip_with (tail (get pair 0)) (tail (get pair 1)))
+        }
+        pair)
+}
+
+entry {
+    let fibs (list 0 \l { (list 1 \l { (zip_with l (tail l)) } l) } 0);
+    set fibs 3 fibs;
+    (printf "%ld\n" (head (drop 49 fibs)));
+    0
+}

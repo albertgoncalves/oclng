@@ -47,6 +47,9 @@ class Tests(TestCase):
     def test_even_odd(self):
         self.into_test("even_odd", "1234567 is odd")
 
+    def test_fib_lazy(self):
+        self.into_test("fib_lazy", 7778742049)
+
     def test_fib_loop(self):
         self.into_test("fib_loop", 20365011074)
 
