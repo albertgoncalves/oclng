@@ -384,7 +384,7 @@ and parse_fn (tokens : token_pos Queue.t) : expr_pos =
   let body : stmt_pos list =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
-  (ExprFn { label = (label, position); args; body }, position)
+  (ExprFn { label = (label, position); args; body; }, position)
 
 and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   match peek tokens with
@@ -436,7 +436,7 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
           {
             label = (Printf.sprintf "_%s_%d_" var (get_k ()), position);
             args = func.args;
-            body = func.body
+            body = func.body;
           },
         position
       )
