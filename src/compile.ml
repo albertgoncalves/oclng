@@ -462,7 +462,9 @@ and compile_stmt : stmt_pos -> unit =
     )
   | (StmtReturn ((ExprCall ((ExprVar "=", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "+", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "-", _), _), _) as expr), _) ->
+  | (StmtReturn ((ExprCall ((ExprVar "-", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "alloc", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _) ->
     compile_return expr
   | (StmtReturn (ExprSwitch (expr, branches), _), _) ->
     compile_switch expr branches
