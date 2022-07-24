@@ -448,7 +448,16 @@ and compile_stmt : stmt_pos -> unit =
       compile_expr expr;
       append_var var
     )
-  | (StmtSet (var, offset, value), _) ->
+  | (StmtSetLocal (var, expr), _) ->
+    (
+      compile_expr expr;
+      context.stack <- context.stack - 1;
+      append_inst
+        (match Hashtbl.find_opt context.vars var with
+         | Some n -> InstPop (get_var n)
+         | None -> assert false)
+    )
+  | (StmtSetHeap (var, offset, value), _) ->
     (
       compile_expr var;
       compile_expr value;

@@ -20,6 +20,7 @@ syn keyword Statement
     \ return
     \ let
     \ set
+    \ seta
     \ switch
 syn keyword Function
     \ entry

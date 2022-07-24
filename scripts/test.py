@@ -59,6 +59,9 @@ class Tests(TestCase):
     def test_function_pointer(self):
         self.into_test("function_pointer", -123)
 
+    def test_set_local(self):
+        self.into_test("set_local", -4560)
+
 
 if __name__ == "__main__":
     main()

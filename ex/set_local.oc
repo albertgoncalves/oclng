@@ -1,0 +1,7 @@
+entry {
+    let x 456;
+    set x (- 0 x);
+    set x (* 10 x);
+    (printf "%ld\n" x);
+    0
+}

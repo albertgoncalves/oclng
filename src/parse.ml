@@ -11,6 +11,7 @@ type token =
   | TokenReturn
   | TokenLet
   | TokenSet
+  | TokenSetA
   | TokenSwitch
 
   | TokenInt of int
@@ -31,6 +32,7 @@ let show_token : token -> string =
   | TokenReturn -> "return"
   | TokenLet -> "let"
   | TokenSet -> "set"
+  | TokenSetA -> "seta"
   | TokenSwitch -> "switch"
 
   | TokenInt x -> string_of_int x
@@ -90,6 +92,7 @@ let into_token : (string * Io.position) -> token_pos =
   | ("return", position) -> (TokenReturn, position)
   | ("let", position) -> (TokenLet, position)
   | ("set", position) -> (TokenSet, position)
+  | ("seta", position) -> (TokenSetA, position)
   | ("switch", position) -> (TokenSwitch, position)
 
   | ("entry", position) -> (TokenIdent "_entry_", position)
@@ -297,9 +300,13 @@ and resolve_stmts
   | (StmtLet (var, expr), position) :: rest ->
     (StmtLet (var, resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
-  | (StmtSet (var, offset, value), position) :: rest ->
+  | (StmtSetLocal (var, value), position) :: rest ->
+    (StmtSetLocal (var, resolve_expr mapping value), position) ::
+    (resolve_stmts mapping rest)
+  | (StmtSetHeap (var, offset, value), position) :: rest ->
     (
-      StmtSet (resolve_expr mapping var, offset, resolve_expr mapping value),
+      StmtSetHeap
+        (resolve_expr mapping var, offset, resolve_expr mapping value),
       position
     ) :: (resolve_stmts mapping rest)
   | (StmtDrop expr, position) :: rest ->
@@ -394,7 +401,8 @@ and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
      | Ok expr -> Ok (StmtReturn expr, position)
      | Error _ as error -> error)
   | (TokenLet, _) -> Ok (parse_let tokens)
-  | (TokenSet, _) -> Ok (parse_set tokens)
+  | (TokenSet, _) -> Ok (parse_set_local tokens)
+  | (TokenSetA, _) -> Ok (parse_set_heap tokens)
   | (_, position) ->
     match parse_expr tokens with
     | Ok expr -> Ok (StmtDrop expr, position)
@@ -444,10 +452,35 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
     | Error position -> Io.exit_at position in
   (StmtLet (var, expr), position)
 
-and parse_set (tokens : token_pos Queue.t) : stmt_pos =
+and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSet, position) -> position
+    | (_, position) -> Io.exit_at position in
+  let var : string =
+    match pop tokens with
+    | (TokenIdent x, _) -> x
+    | (_, position) -> Io.exit_at position in
+  let expr : expr_pos =
+    match parse_expr tokens with
+    | Ok (ExprFn func, position) ->
+      (
+        ExprFn
+          {
+            label = (Printf.sprintf "_%s_%d_" var (get_k ()), position);
+            args = func.args;
+            body = func.body;
+          },
+        position
+      )
+    | Ok expr -> expr
+    | Error position -> Io.exit_at position in
+  (StmtSetLocal (var, expr), position)
+
+and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenSetA, position) -> position
     | (_, position) -> Io.exit_at position in
   let var : expr_pos =
     match parse_expr tokens with
@@ -461,7 +494,7 @@ and parse_set (tokens : token_pos Queue.t) : stmt_pos =
     match parse_expr tokens with
     | Ok value -> value
     | Error position -> Io.exit_at position in
-  (StmtSet (var, offset, value), position)
+  (StmtSetHeap (var, offset, value), position)
 
 let parse_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =

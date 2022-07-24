@@ -1,13 +1,13 @@
 fib n {
     let scope (alloc 2);
-    set scope 0 0;
-    set scope 1 1;
+    seta scope 0 0;
+    seta scope 1 1;
     let loop \scope n {
         switch (= n 0) {
             let a (get scope 0);
             let b (get scope 1);
-            set scope 0 b;
-            set scope 1 (+ a b);
+            seta scope 0 b;
+            seta scope 1 (+ a b);
             (loop scope (- n 1))
         } {
             (get scope 0)

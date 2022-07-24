@@ -1,11 +1,11 @@
 entry {
     let counter \ {
         let scope (alloc 2);
-        set scope 0 \scope {
-            set scope 1 (+ (get scope 1) 1);
+        seta scope 0 \scope {
+            seta scope 1 (+ (get scope 1) 1);
             (get scope 1)
         };
-        set scope 1 0;
+        seta scope 1 0;
         scope
     };
     let scope0 (counter);
