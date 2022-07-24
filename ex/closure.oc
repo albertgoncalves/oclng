@@ -1,0 +1,17 @@
+entry {
+    let counter \ {
+        let scope (alloc 2);
+        set scope 0 \scope {
+            set scope 1 (+ (get scope 1) 1);
+            (get scope 1)
+        };
+        set scope 1 0;
+        scope
+    };
+    let scope0 (counter);
+    let scope1 (counter);
+    ((get scope0 0) scope0);
+    ((get scope1 0) scope1);
+    (printf "%ld\n" ((get scope0 0) scope0));
+    0
+}

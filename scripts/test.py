@@ -19,6 +19,9 @@ class Tests(TestCase):
     def test_alloc(self):
         self.into_test("alloc", "13701 -123 -1")
 
+    def test_closure(self):
+        self.into_test("closure", 2)
+
     def test_collatz(self):
         self.into_test("collatz", "3,10,5,16,8,4,2,1")
 
@@ -43,6 +46,9 @@ class Tests(TestCase):
 
     def test_even_odd(self):
         self.into_test("even_odd", "1234567 is odd")
+
+    def test_fib_loop(self):
+        self.into_test("fib_loop", 20365011074)
 
     def test_fib_tco(self):
         self.into_test("fib_tco", 12586269025)
