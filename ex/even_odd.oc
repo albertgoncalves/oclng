@@ -17,11 +17,9 @@ entry {
             0
         }
     };
-    (
-        printf
+    (printf
         "%ld is %s\n"
         x
-        switch ((is_even) x) { let y "odd"; y } { "even" }
-    );
+        switch ((is_even) x) { let y "odd"; y } { "even" });
     0
 }
