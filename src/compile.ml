@@ -346,6 +346,34 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
            ]
        )
      | _ -> assert false)
+  | "ref_incr" ->
+    (match args with
+     | [expr] ->
+       (
+         compile_expr expr;
+         append_insts
+           [
+             InstPop (OpReg RegRdi);
+             InstCall (OpLabel "ref_incr");
+             InstPush (OpReg RegEax);
+           ];
+         Hashtbl.replace context.externs "ref_incr" ()
+       )
+     | _ -> assert false)
+  | "ref_decr" ->
+    (match args with
+     | [expr] ->
+       (
+         compile_expr expr;
+         append_insts
+           [
+             InstPop (OpReg RegRdi);
+             InstCall (OpLabel "ref_decr");
+             InstPush (OpReg RegEax);
+           ];
+         Hashtbl.replace context.externs "ref_decr" ()
+       )
+     | _ -> assert false)
   | "printf" ->
     (
       compile_call_args arg_regs args;
@@ -476,7 +504,9 @@ and compile_stmt : stmt_pos -> unit =
   | (StmtReturn ((ExprCall ((ExprVar "-", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "printf", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "alloc", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _) ->
+  | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "ref_incr", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "ref_decr", _), _), _) as expr), _) ->
     compile_return expr
   | (StmtReturn (ExprSwitch (expr, branches), _), _) ->
     compile_switch expr branches

@@ -6,12 +6,15 @@ extrn fflush
 extrn stdout
 extrn stderr
 
+extrn print_memory
+
 extrn _entry_
 
 section '.text' executable
     _start:
         call _entry_
         push rax
+        call print_memory
         mov rdi, [stdout]
         call fflush
         mov rdi, [stderr]

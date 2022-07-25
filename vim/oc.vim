@@ -27,5 +27,7 @@ syn keyword Function
     \ printf
     \ alloc
     \ get
+    \ ref_incr
+    \ ref_decr
 
 let b:current_syntax = "oc"

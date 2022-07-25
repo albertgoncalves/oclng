@@ -1,17 +1,47 @@
 entry {
     let counter \ {
         let scope (alloc 2);
+        (ref_incr scope);
+
         seta scope 0 \scope {
-            seta scope 1 (+ (get scope 1) 1);
+            (ref_incr (get scope 1));
+            (ref_incr scope);
+
+            seta (get scope 1) 0 (+ (get (get scope 1) 0) 1);
+
+            (ref_decr (get scope 1));
+            (ref_decr scope);
+
             (get scope 1)
         };
-        seta scope 1 0;
+
+        seta scope 1 (alloc 1);
+        (ref_incr (get scope 1));
+
+        seta (get scope 1) 0 0;
+
+        (ref_decr (get scope 1));
+        (ref_decr scope);
+
         scope
     };
+
     let scope0 (counter);
+    (ref_incr (get scope0 1));
+    (ref_incr scope0);
+
     let scope1 (counter);
+    (ref_incr (get scope1 1));
+    (ref_incr scope1);
+
     ((get scope0 0) scope0);
     ((get scope1 0) scope1);
-    (printf "%ld\n" ((get scope0 0) scope0));
+    (printf "%ld\n" (get ((get scope0 0) scope0) 0));
+
+    (ref_decr (get scope0 1));
+    (ref_decr scope0);
+    (ref_decr (get scope1 1));
+    (ref_decr scope1);
+
     0
 }
