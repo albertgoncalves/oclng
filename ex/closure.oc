@@ -1,7 +1,6 @@
 entry {
     let counter \ {
-        let scope (alloc 2);
-        (ref_incr scope);
+        let scope (ref_incr (alloc 2));
 
         seta scope 0 \scope {
             (ref_incr (get scope 1));
@@ -15,8 +14,7 @@ entry {
             (get scope 1)
         };
 
-        seta scope 1 (alloc 1);
-        (ref_incr (get scope 1));
+        seta scope 1 (ref_incr (alloc 1));
 
         seta (get scope 1) 0 0;
 

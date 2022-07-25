@@ -44,14 +44,14 @@ u64* alloc(u32 size) {
     return &block[1];
 }
 
-u32 ref_incr(u64*);
-u32 ref_incr(u64* block) {
-    return ++((Header*)&block[-1])->as_struct.refs;
+void ref_incr(u64*);
+void ref_incr(u64* block) {
+    ++((Header*)&block[-1])->as_struct.refs;
 }
 
-u32 ref_decr(u64*);
-u32 ref_decr(u64* block) {
-    return --((Header*)&block[-1])->as_struct.refs;
+void ref_decr(u64*);
+void ref_decr(u64* block) {
+    --((Header*)&block[-1])->as_struct.refs;
 }
 
 void print_memory(void);

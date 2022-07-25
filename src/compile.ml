@@ -353,9 +353,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          compile_expr expr;
          append_insts
            [
-             InstPop (OpReg RegRdi);
+             InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
              InstCall (OpLabel "ref_incr");
-             InstPush (OpReg RegEax);
            ];
          Hashtbl.replace context.externs "ref_incr" ()
        )
@@ -367,9 +366,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          compile_expr expr;
          append_insts
            [
-             InstPop (OpReg RegRdi);
+             InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
              InstCall (OpLabel "ref_decr");
-             InstPush (OpReg RegEax);
            ];
          Hashtbl.replace context.externs "ref_decr" ()
        )
