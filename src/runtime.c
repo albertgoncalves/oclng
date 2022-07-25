@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+typedef uint32_t u32;
 typedef uint64_t u64;
 
 #define ERROR 1
@@ -23,8 +24,8 @@ typedef uint64_t u64;
 extern u64 MEMORY[MEMORY_CAP / 8];
 extern u64 MEMORY_LEN;
 
-u64* alloc(u64);
-u64* alloc(u64 size) {
+u64* alloc(u32);
+u64* alloc(u32 size) {
     EXIT_IF((size == 0) || ((size % 8) != 0));
     u64 len = MEMORY_LEN + size;
     EXIT_IF(MEMORY_CAP < len);

@@ -2,6 +2,7 @@ open Types
 
 type reg =
   | RegRdi
+  | RegEdi
   | RegRsi
   | RegRdx
   | RegRcx
@@ -10,8 +11,8 @@ type reg =
   | RegR10
   | RegR10b
   | RegR11
-  | RegEax
   | RegRax
+  | RegEax
   | RegRsp
 
 type op =
@@ -83,6 +84,7 @@ let get_k () : int =
 let show_reg : reg -> string =
   function
   | RegRdi -> "rdi"
+  | RegEdi -> "edi"
   | RegRsi -> "rsi"
   | RegRdx -> "rdx"
   | RegRcx -> "rcx"
@@ -91,8 +93,8 @@ let show_reg : reg -> string =
   | RegR10 -> "r10"
   | RegR10b -> "r10b"
   | RegR11 -> "r11"
-  | RegEax -> "eax"
   | RegRax -> "rax"
+  | RegEax -> "eax"
   | RegRsp -> "rsp"
 
 let show_op : op -> string =
@@ -325,7 +327,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
      | [(ExprInt n, _)] ->
        append_insts
          [
-           InstMov (OpReg RegRdi, OpImm (n * 8));
+           InstMov (OpReg RegEdi, OpImm (n * 8));
            InstCall (OpLabel "alloc");
            InstPush (OpReg RegRax);
          ];
@@ -351,7 +353,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
         [
           InstXor (OpReg RegEax, OpReg RegEax);
           InstCall (OpLabel "printf");
-          InstPush (OpReg RegRax);
+          InstPush (OpReg RegEax);
         ];
       context.stack <- context.stack + 1;
       Hashtbl.replace context.externs "printf" ()
