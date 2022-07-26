@@ -346,7 +346,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
            ]
        )
      | _ -> assert false)
-  | "ref_incr" ->
+  | "ref+" ->
     (match args with
      | [expr] ->
        (
@@ -359,7 +359,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          Hashtbl.replace context.externs "ref_incr" ()
        )
      | _ -> assert false)
-  | "ref_decr" ->
+  | "ref-" ->
     (match args with
      | [expr] ->
        (

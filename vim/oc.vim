@@ -27,7 +27,8 @@ syn keyword Function
     \ printf
     \ alloc
     \ get
-    \ ref_incr
-    \ ref_decr
+
+syn match Function "ref+"
+syn match Function "ref-"
 
 let b:current_syntax = "oc"
