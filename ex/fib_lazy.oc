@@ -1,5 +1,6 @@
 list h f x {
     let l (alloc 4);
+    (child+ l 3);
     seta l 0 0;
     seta l 1 h;
     seta l 2 f;
@@ -32,6 +33,8 @@ drop n l {
 
 zip_with l0 l1 {
     let pair (alloc 2);
+    (child+ pair 0);
+    (child+ pair 1);
     seta pair 0 l0;
     seta pair 1 l1;
     (list
@@ -43,8 +46,12 @@ zip_with l0 l1 {
 }
 
 entry {
-    let fibs (list 0 \l { (list 1 \l { (zip_with l (tail l)) } l) } 0);
-    seta fibs 3 fibs;
-    (printf "%ld\n" (head (drop 49 fibs)));
+    (\ {
+        let fibs (list 0 \l { (list 1 \l { (zip_with l (tail l)) } l) } 0);
+        seta fibs 3 fibs;
+        (printf "%ld\n" (head (drop 49 fibs)));
+        (print_stack);
+        0
+    });
     0
 }

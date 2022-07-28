@@ -2,7 +2,7 @@
 
 set -eu
 
-memory_cap=4096
+heap_cap=4096
 flags_ocaml=(
     -g
     -nolabels
@@ -13,13 +13,15 @@ flags_ocaml=(
 )
 flags_c=(
     -c
-    "-DMEMORY_CAP=${memory_cap}"
+    "-DHEAP_CAP=${heap_cap}"
     "-ferror-limit=1"
+    -fshort-enums
     "-march=native"
     -O3
     "-std=c99"
     -Werror
     -Weverything
+    -Wno-c11-extensions
     -Wno-declaration-after-statement
     -Wno-disabled-macro-expansion
     -Wno-extra-semi-stmt
@@ -43,6 +45,6 @@ flags_c=(
     for _ in $(jobs -p); do
         wait -n
     done
-    fasm -d "MEMORY_CAP=${memory_cap}" "$WD/src/runtime.asm" \
+    fasm -d "HEAP_CAP=${heap_cap}" "$WD/src/runtime.asm" \
         "$WD/build/runtime_asm.o"
 )

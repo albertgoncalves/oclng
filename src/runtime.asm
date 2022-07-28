@@ -6,15 +6,16 @@ extrn fflush
 extrn stdout
 extrn stderr
 
-extrn print_memory
+extrn print_heap
 
 extrn _entry_
 
 section '.text' executable
     _start:
+        mov rbp, rsp
         call _entry_
         push rax
-        call print_memory
+        call print_heap
         mov rdi, [stdout]
         call fflush
         mov rdi, [stderr]
@@ -23,11 +24,11 @@ section '.text' executable
         mov eax, 60
         syscall
 
-public MEMORY
-public MEMORY_LEN
+public HEAP_MEMORY
+public HEAP_LEN
 
 section '.data' writeable
-    MEMORY_LEN dq 0
+    HEAP_LEN dq 0
 
 section '.bss' writeable
-    MEMORY rb MEMORY_CAP
+    HEAP_MEMORY rb HEAP_CAP

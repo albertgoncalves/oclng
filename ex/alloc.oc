@@ -9,9 +9,11 @@ entry {
     # u64** y = ...;
     let y (alloc 1);
     seta y 0 (alloc 1);
+    (child+ y 0);
     # y[0][0] = -1;
     seta (get y 0) 0 (- 0 1);
 
     (printf "%ld %ld %ld\n" (get x 1) (get x 0) (get (get y 0) 0));
+    (print_stack);
     0
 }

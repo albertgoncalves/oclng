@@ -27,8 +27,8 @@ syn keyword Function
     \ printf
     \ alloc
     \ get
+    \ print_stack
 
-syn match Function "ref+"
-syn match Function "ref-"
+syn match Function "child+"
 
 let b:current_syntax = "oc"

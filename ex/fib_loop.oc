@@ -13,6 +13,7 @@ fib n {
             (get scope 0)
         }
     };
+    (print_stack);
     (loop scope n)
 }
 

@@ -3,7 +3,9 @@ open Types
 type reg =
   | RegRdi
   | RegEdi
+  | RegDi
   | RegRsi
+  | RegSil
   | RegRdx
   | RegRcx
   | RegR8
@@ -13,6 +15,7 @@ type reg =
   | RegR11
   | RegRax
   | RegEax
+  | RegRbp
   | RegRsp
 
 type op =
@@ -85,7 +88,9 @@ let show_reg : reg -> string =
   function
   | RegRdi -> "rdi"
   | RegEdi -> "edi"
+  | RegDi -> "di"
   | RegRsi -> "rsi"
+  | RegSil -> "sil"
   | RegRdx -> "rdx"
   | RegRcx -> "rcx"
   | RegR8 -> "r8"
@@ -95,6 +100,7 @@ let show_reg : reg -> string =
   | RegR11 -> "r11"
   | RegRax -> "rax"
   | RegEax -> "eax"
+  | RegRbp -> "rbp"
   | RegRsp -> "rsp"
 
 let show_op : op -> string =
@@ -348,30 +354,33 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
            ]
        )
      | _ -> assert false)
-  | "ref+" ->
+  | "child+" ->
     (match args with
-     | [expr] ->
+     | [expr; (ExprInt n, _)] ->
        (
          compile_expr expr;
          append_insts
            [
              InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
-             InstCall (OpLabel "ref_incr");
+             InstMov (OpReg RegSil, OpImm n);
+             InstCall (OpLabel "set_child");
            ];
-         Hashtbl.replace context.externs "ref_incr" ()
+         Hashtbl.replace context.externs "set_child" ()
        )
      | _ -> assert false)
-  | "ref-" ->
+  | "print_stack" ->
     (match args with
-     | [expr] ->
+     | [] ->
        (
-         compile_expr expr;
          append_insts
            [
-             InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
-             InstCall (OpLabel "ref_decr");
+             InstMov (OpReg RegRdi, OpReg RegRbp);
+             InstMov (OpReg RegRsi, OpReg RegRsp);
+             InstCall (OpLabel "print_stack");
+             InstPush (OpImm 0);
            ];
-         Hashtbl.replace context.externs "ref_decr" ()
+         context.stack <- context.stack + 1;
+         Hashtbl.replace context.externs "print_stack" ()
        )
      | _ -> assert false)
   | "printf" ->
@@ -508,8 +517,8 @@ and compile_stmt : stmt_pos -> unit =
   | (StmtReturn ((ExprCall ((ExprVar "printf", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "alloc", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "ref_incr", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "ref_decr", _), _), _) as expr), _) ->
+  | (StmtReturn ((ExprCall ((ExprVar "child+", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "print_stack", _), _), _) as expr), _) ->
     compile_return expr
   | (StmtReturn (ExprSwitch (expr, branches), _), _) ->
     compile_switch expr branches
