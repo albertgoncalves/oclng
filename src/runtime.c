@@ -88,7 +88,7 @@ void print_heap(void) {
         EXIT_IF(!header);
         fprintf(stderr,
                 "    %p - { reachable: %hhu, size:%hu, children:0x%x }\n",
-                (void*)&HEAP_MEMORY[offset / 8],
+                (void*)header,
                 header->as_struct.reachable,
                 header->as_struct.size,
                 header->as_struct.children);
@@ -106,12 +106,12 @@ void print_stack(u64* base, u64* top) {
     --base;
     --top;
     for (; top < base; --base) {
-        fprintf(stderr, "    %p - %p", *(void**)&base, *(void**)base);
+        fprintf(stderr, "    %p - %p", (void*)base, *(void**)base);
         u64* block = *(u64**)base;
         if (within_heap(block)) {
             Header* header = get_header(&block[-1]);
             if (header) {
-                fprintf(stderr, " [ HEAP { header:%p } ]", *(void**)header);
+                fprintf(stderr, " - HEAP { header: %p }", *(void**)header);
             }
         }
         fputc('\n', stderr);
