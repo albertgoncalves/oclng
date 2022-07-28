@@ -325,14 +325,16 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
   | "alloc" ->
     (match args with
      | [(ExprInt n, _)] ->
-       append_insts
-         [
-           InstMov (OpReg RegEdi, OpImm (n * 8));
-           InstCall (OpLabel "alloc");
-           InstPush (OpReg RegRax);
-         ];
-       context.stack <- context.stack + 1;
-       Hashtbl.replace context.externs "alloc" ()
+       (
+         append_insts
+           [
+             InstMov (OpReg RegDi, OpImm (n * 8));
+             InstCall (OpLabel "alloc");
+             InstPush (OpReg RegRax);
+           ];
+         context.stack <- context.stack + 1;
+         Hashtbl.replace context.externs "alloc" ()
+       )
      | _ -> assert false)
   | "get" ->
     (match args with
