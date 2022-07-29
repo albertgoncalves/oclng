@@ -25,10 +25,6 @@ section '.text' executable
         syscall
 
 public HEAP_MEMORY
-public HEAP_LEN
-
-section '.data' writeable
-    HEAP_LEN dq 0
 
 section '.bss' writeable
     HEAP_MEMORY rb HEAP_CAP

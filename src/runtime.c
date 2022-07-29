@@ -47,36 +47,47 @@ union Block {
 };
 
 STATIC_ASSERT(sizeof(Block) == sizeof(u64));
+STATIC_ASSERT(sizeof(Block) == sizeof(void*));
+
+#define FREE_CAP 1024
+#define HEAP_END (HEAP_CAP - FREE_CAP)
+
+STATIC_ASSERT(FREE_CAP < HEAP_CAP);
 
 extern Block HEAP_MEMORY[HEAP_CAP / sizeof(Block)];
-extern u64   HEAP_LEN;
+
+static Block** FREE_MEMORY = &HEAP_MEMORY[HEAP_END / sizeof(Block)].as_child;
+
+static u64 HEAP_LEN = 0;
+static u64 FREE_LEN = 0;
 
 static Bool within_heap(Block* block) {
-    return (HEAP_MEMORY <= block) && (block < (&HEAP_MEMORY[HEAP_CAP / 8]));
+    return (HEAP_MEMORY <= block) &&
+           (block < (&HEAP_MEMORY[HEAP_END / sizeof(Block)]));
 }
 
 static Bool valid(Header header) {
-    return (header.magic == 0xFF) && (!((u8)(~(1 << 0)) & header.reachable));
+    return (header.magic == 0xFF) && (header.size != 0) &&
+           ((header.size % sizeof(Block)) == 0) &&
+           (!((u8)(~(1 << 0)) & header.reachable));
 }
 
 Block* alloc(u16);
 Block* alloc(u16 size) {
     EXIT_IF((size == 0) || ((size % sizeof(Block)) != 0));
     size += sizeof(Block);
-    for (u64 offset = 0; offset < HEAP_LEN;) {
-        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        EXIT_IF(!valid(block->as_header));
+    for (u64 offset = 0; offset < FREE_LEN; offset += sizeof(Block*)) {
+        Block* block = FREE_MEMORY[offset / sizeof(Block*)];
         if ((!block->as_header.reachable) && (size <= block->as_header.size)) {
             block->as_header.reachable = TRUE;
             block->as_header.children = 0;
             return &block[1];
         }
-        offset += block->as_header.size;
     }
     u64 len = HEAP_LEN + size;
-    EXIT_IF(HEAP_CAP < len);
+    EXIT_IF(HEAP_END < len);
     Block* block = &HEAP_MEMORY[HEAP_LEN / sizeof(Block)];
-    block[0].as_header = (Header){
+    block->as_header = (Header){
         .magic = 0xFF,
         .reachable = TRUE,
         .size = size,
@@ -131,28 +142,36 @@ u64 free(u64* base, u64* top) {
         }
         EXIT_IF(!valid(block->as_header));
         block->as_header.reachable = TRUE;
-    }
-    for (u64 offset = 0; offset < HEAP_LEN;) {
-        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        EXIT_IF(!valid(block->as_header));
         if (block->as_header.reachable) {
             trace_children(block);
         }
-        offset += block->as_header.size;
     }
     u64 after = 0;
-    u64 len = 0;
+    {
+        u64 len = 0;
+        for (u64 offset = 0; offset < HEAP_LEN;) {
+            Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+            EXIT_IF(!valid(block->as_header));
+            offset += block->as_header.size;
+            if (block->as_header.reachable) {
+                after += block->as_header.size;
+                len = offset;
+            }
+        }
+        EXIT_IF(HEAP_END < len);
+        HEAP_LEN = len;
+    }
+    FREE_LEN = 0;
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
         EXIT_IF(!valid(block->as_header));
         offset += block->as_header.size;
-        if (block->as_header.reachable) {
-            after += block->as_header.size;
-            len = offset;
+        if (!block->as_header.reachable) {
+            FREE_MEMORY[FREE_LEN / sizeof(Block*)] = block;
+            FREE_LEN += sizeof(Block*);
+            EXIT_IF(FREE_CAP < FREE_LEN);
         }
     }
-    EXIT_IF(HEAP_CAP < len);
-    HEAP_LEN = len;
     return before - after;
 }
 

@@ -27,6 +27,9 @@ flags_c=(
     -Wno-extra-semi-stmt
     -Wno-incompatible-library-redeclaration
 )
+flags_fasm=(
+    -d "HEAP_CAP=${heap_cap}"
+)
 
 (
     ocp-indent -i "$WD/src/"*.ml &
@@ -46,6 +49,5 @@ flags_c=(
     for _ in $(jobs -p); do
         wait -n
     done
-    fasm -d "HEAP_CAP=${heap_cap}" "$WD/src/runtime.asm" \
-        "$WD/build/runtime_asm.o"
+    fasm "${flags_fasm[@]}" "$WD/src/runtime.asm" "$WD/build/runtime_asm.o"
 )
