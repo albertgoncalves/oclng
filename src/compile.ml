@@ -332,6 +332,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
     (match args with
      | [(ExprInt n, _)] ->
        (
+         assert (n < 32);
          append_insts
            [
              InstMov (OpReg RegDi, OpImm (n * 8));
