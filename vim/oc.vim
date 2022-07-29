@@ -26,6 +26,7 @@ syn keyword Function
     \ entry
     \ printf
     \ alloc
+    \ free
     \ get
     \ print_stack
 

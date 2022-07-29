@@ -2,14 +2,19 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#define STATIC_ASSERT(condition) _Static_assert(condition, "!(" #condition ")")
+
 typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-#define ERROR 1
+typedef enum {
+    FALSE = 0,
+    TRUE,
+} Bool;
 
-#define STATIC_ASSERT(condition) _Static_assert(condition, "!(" #condition ")")
+#define ERROR 1
 
 #define EXIT_IF(condition)             \
     {                                  \
@@ -25,94 +30,140 @@ typedef uint64_t u64;
         }                              \
     }
 
-typedef enum {
-    FALSE = 0,
-    TRUE,
-} Bool;
+typedef struct {
+    u32  children;
+    u16  size;
+    Bool reachable;
+    u8   magic;
+} Header;
 
 STATIC_ASSERT(sizeof(Bool) == sizeof(u8));
 
-typedef union {
-    struct {
-        u32  children;
-        u16  size;
-        Bool reachable;
-        u8   magic;
-    } as_struct;
-    u64 as_u64;
-} Header;
+typedef union Block Block;
 
-STATIC_ASSERT(sizeof(Header) == sizeof(u64));
+union Block {
+    Header as_header;
+    Block* as_child;
+};
 
-extern u64 HEAP_MEMORY[HEAP_CAP / 8];
-extern u64 HEAP_LEN;
+STATIC_ASSERT(sizeof(Block) == sizeof(u64));
 
-u64* alloc(u16);
-u64* alloc(u16 size) {
-    EXIT_IF((size == 0) || ((size % 8) != 0));
-    size += 8;
+extern Block HEAP_MEMORY[HEAP_CAP / sizeof(Block)];
+extern u64   HEAP_LEN;
+
+static Bool within_heap(Block* block) {
+    return (HEAP_MEMORY <= block) && (block < (&HEAP_MEMORY[HEAP_CAP / 8]));
+}
+
+static Bool valid(Header header) {
+    return (header.magic == 0xFF) && (!((u8)(~(1 << 0)) & header.reachable));
+}
+
+Block* alloc(u16);
+Block* alloc(u16 size) {
+    EXIT_IF((size == 0) || ((size % sizeof(Block)) != 0));
+    size += sizeof(Block);
+    for (u64 offset = 0; offset < HEAP_LEN;) {
+        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+        EXIT_IF(!valid(block->as_header));
+        if ((!block->as_header.reachable) && (size <= block->as_header.size)) {
+            block->as_header.reachable = TRUE;
+            block->as_header.children = 0;
+            return &block[1];
+        }
+        offset += block->as_header.size;
+    }
     u64 len = HEAP_LEN + size;
     EXIT_IF(HEAP_CAP < len);
-    u64* block = &HEAP_MEMORY[HEAP_LEN / 8];
-    block[0] =
-        ((Header){
-             .as_struct = {.magic = 0xFF, .reachable = TRUE, .size = size}})
-            .as_u64;
+    Block* block = &HEAP_MEMORY[HEAP_LEN / sizeof(Block)];
+    block[0].as_header = (Header){
+        .magic = 0xFF,
+        .reachable = TRUE,
+        .size = size,
+        .children = 0,
+    };
     HEAP_LEN = len;
     return &block[1];
 }
 
-void set_child(u64*, u8);
-void set_child(u64* block, u8 child) {
+void set_child(Block*, u8);
+void set_child(Block* block, u8 child) {
     EXIT_IF(31 < child);
-    Header* header = (Header*)&block[-1];
-    header->as_struct.children |= 1 << child;
+    block[-1].as_header.children |= 1 << child;
 }
 
-static Header* get_header(u64* block) {
-    Header* header = (Header*)block;
-    if (header->as_struct.magic != 0xFF) {
-        return NULL;
+static void trace_children(Block* block) {
+    for (u32 i = 0; i < 32; ++i) {
+        u32 mask = 1 << i;
+        if (block->as_header.children < mask) {
+            break;
+        }
+        if (block->as_header.children & mask) {
+            Block* child = &block[i + 1].as_child[-1];
+            EXIT_IF(!(within_heap(child) && valid(child->as_header)));
+            if (child->as_header.reachable) {
+                continue;
+            }
+            child->as_header.reachable = TRUE;
+            trace_children(child);
+        }
     }
-    if ((u8)(~(1 << 0)) & header->as_struct.reachable) {
-        return NULL;
+}
+
+void free(u64*, u64*);
+void free(u64* base, u64* top) {
+    for (u64 offset = 0; offset < HEAP_LEN;) {
+        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+        EXIT_IF(!valid(block->as_header));
+        block->as_header.reachable = FALSE;
+        offset += block->as_header.size;
     }
-    return header;
+    base -= 2;
+    top -= 1;
+    for (; top < base; --base) {
+        Block* block = &(*(Block**)base)[-1];
+        if (!within_heap(block)) {
+            continue;
+        }
+        EXIT_IF(!valid(block->as_header));
+        block->as_header.reachable = TRUE;
+    }
+    for (u64 offset = 0; offset < HEAP_LEN;) {
+        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+        EXIT_IF(!valid(block->as_header));
+        if (block->as_header.reachable) {
+            trace_children(block);
+        }
+        offset += block->as_header.size;
+    }
 }
 
 void print_heap(void);
 void print_heap(void) {
     fprintf(stderr, "\nHEAP\n");
     for (u64 offset = 0; offset < HEAP_LEN;) {
-        Header* header = get_header(&HEAP_MEMORY[offset / 8]);
-        EXIT_IF(!header);
+        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+        EXIT_IF(!valid(block->as_header));
         fprintf(stderr,
                 "    %p - { reachable: %hhu, size:%hu, children:0x%x }\n",
-                (void*)header,
-                header->as_struct.reachable,
-                header->as_struct.size,
-                header->as_struct.children);
-        offset += header->as_struct.size;
+                (void*)block,
+                block->as_header.reachable,
+                block->as_header.size,
+                block->as_header.children);
+        offset += block->as_header.size;
     }
-}
-
-static Bool within_heap(u64* block) {
-    return (HEAP_MEMORY <= block) && (block < (&HEAP_MEMORY[HEAP_CAP / 8]));
 }
 
 void print_stack(u64*, u64*);
 void print_stack(u64* base, u64* top) {
     fprintf(stderr, "\nSTACK\n");
-    --base;
-    --top;
+    base -= 2;
+    top -= 1;
     for (; top < base; --base) {
         fprintf(stderr, "    %p - %p", (void*)base, *(void**)base);
-        u64* block = *(u64**)base;
-        if (within_heap(block)) {
-            Header* header = get_header(&block[-1]);
-            if (header) {
-                fprintf(stderr, " - HEAP { header: %p }", *(void**)header);
-            }
+        Block* block = &(*(Block**)base)[-1];
+        if (within_heap(block) && valid(block->as_header)) {
+            fprintf(stderr, " - HEAP { header: %p }", *(void**)block);
         }
         fputc('\n', stderr);
     }

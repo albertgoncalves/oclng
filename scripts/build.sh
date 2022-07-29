@@ -25,6 +25,7 @@ flags_c=(
     -Wno-declaration-after-statement
     -Wno-disabled-macro-expansion
     -Wno-extra-semi-stmt
+    -Wno-incompatible-library-redeclaration
 )
 
 (

@@ -1,4 +1,5 @@
 list h f x {
+    (free);
     let l (alloc 4);
     (child+ l 3);
     seta l 0 0;
@@ -16,6 +17,7 @@ tail l {
     switch (get l 0) {
         let x ((get l 2) (get l 3));
         seta l 0 1;
+        (child+ l 3);
         seta l 3 x;
         x
     } {
@@ -32,6 +34,7 @@ drop n l {
 }
 
 zip_with l0 l1 {
+    (free);
     let pair (alloc 2);
     (child+ pair 0);
     (child+ pair 1);
@@ -53,5 +56,6 @@ entry {
         (print_stack);
         0
     });
+    (free);
     0
 }

@@ -343,6 +343,21 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
          Hashtbl.replace context.externs "alloc" ()
        )
      | _ -> assert false)
+  | "free" ->
+    (match args with
+     | [] ->
+       (
+         append_insts
+           [
+             InstMov (OpReg RegRdi, OpReg RegRbp);
+             InstMov (OpReg RegRsi, OpReg RegRsp);
+             InstCall (OpLabel "free");
+             InstPush (OpImm 0);
+           ];
+         context.stack <- context.stack + 1;
+         Hashtbl.replace context.externs "free" ()
+       )
+     | _ -> assert false)
   | "get" ->
     (match args with
      | [expr; (ExprInt offset, _)] ->
@@ -517,6 +532,7 @@ and compile_stmt : stmt_pos -> unit =
   | (StmtReturn ((ExprCall ((ExprVar "%", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "printf", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "alloc", _), _), _) as expr), _)
+  | (StmtReturn ((ExprCall ((ExprVar "free", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "child+", _), _), _) as expr), _)
   | (StmtReturn ((ExprCall ((ExprVar "print_stack", _), _), _) as expr), _) ->

@@ -15,5 +15,6 @@ entry {
 
     (printf "%ld %ld %ld\n" (get x 1) (get x 0) (get (get y 0) 0));
     (print_stack);
+    (free);
     0
 }
