@@ -110,12 +110,16 @@ static void trace_children(Block* block) {
     }
 }
 
-void free(u64*, u64*);
-void free(u64* base, u64* top) {
+u64 free(u64*, u64*);
+u64 free(u64* base, u64* top) {
+    u64 before = 0;
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
         EXIT_IF(!valid(block->as_header));
-        block->as_header.reachable = FALSE;
+        if (block->as_header.reachable) {
+            block->as_header.reachable = FALSE;
+            before += block->as_header.size;
+        }
         offset += block->as_header.size;
     }
     base -= 2;
@@ -136,6 +140,16 @@ void free(u64* base, u64* top) {
         }
         offset += block->as_header.size;
     }
+    u64 after = 0;
+    for (u64 offset = 0; offset < HEAP_LEN;) {
+        Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
+        EXIT_IF(!valid(block->as_header));
+        if (block->as_header.reachable) {
+            after += block->as_header.size;
+        }
+        offset += block->as_header.size;
+    }
+    return before - after;
 }
 
 void print_heap(void);

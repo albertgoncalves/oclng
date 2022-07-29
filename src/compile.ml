@@ -352,7 +352,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
              InstMov (OpReg RegRdi, OpReg RegRbp);
              InstMov (OpReg RegRsi, OpReg RegRsp);
              InstCall (OpLabel "free");
-             InstPush (OpImm 0);
+             InstPush (OpReg RegRax);
            ];
          context.stack <- context.stack + 1;
          Hashtbl.replace context.externs "free" ()
