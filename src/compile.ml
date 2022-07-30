@@ -216,7 +216,10 @@ let rec compile_expr : expr_pos -> unit =
          | None -> InstPush (OpLabel var));
       context.stack <- context.stack + 1
     )
-  | (ExprCall ((ExprVar label, _), args), _) -> compile_call_label label args
+  | (ExprCall ((ExprVar label, _), args), _) ->
+    if not (compile_intrinsic label args) then (
+      compile_call_label label args
+    )
   | (ExprCall (expr, args), _) ->
     (
       compile_call_args arg_regs args;
@@ -246,7 +249,7 @@ and compile_call_args (regs : reg list) : expr_pos list -> unit =
          context.stack <- context.stack - 1;
        ))
 
-and compile_call_label (label : string) (args : expr_pos list) : unit =
+and compile_intrinsic (label : string) (args : expr_pos list) : bool =
   match label with
   | "=" | "+" | "-" | "*" ->
     (match args with
@@ -272,7 +275,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
             | "*" -> [InstIMul (OpReg RegR10, OpReg RegR11)]
             | _ -> assert false);
          append_inst (InstPush (OpReg RegR10));
-         context.stack <- context.stack - 1
+         context.stack <- context.stack - 1;
+         true
        )
      | _ -> assert false)
   | "/" ->
@@ -298,7 +302,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
 
              InstPush (OpReg RegRax);
            ];
-         context.stack <- context.stack - 1
+         context.stack <- context.stack - 1;
+         true
        )
      | _ -> assert false)
   | "%" ->
@@ -325,7 +330,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
 
              InstPush (OpReg RegRdx);
            ];
-         context.stack <- context.stack - 1
+         context.stack <- context.stack - 1;
+         true
        )
      | _ -> assert false)
   | "alloc" ->
@@ -340,7 +346,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
              InstPush (OpReg RegRax);
            ];
          context.stack <- context.stack + 1;
-         Hashtbl.replace context.externs "alloc" ()
+         Hashtbl.replace context.externs "alloc" ();
+         true
        )
      | _ -> assert false)
   | "free" ->
@@ -355,7 +362,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
              InstPush (OpReg RegRax);
            ];
          context.stack <- context.stack + 1;
-         Hashtbl.replace context.externs "free" ()
+         Hashtbl.replace context.externs "free" ();
+         true
        )
      | _ -> assert false)
   | "get" ->
@@ -367,7 +375,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
            [
              InstPop (OpReg RegR11);
              InstPush (OpDerefRegOffset (RegR11, offset));
-           ]
+           ];
+         true
        )
      | _ -> assert false)
   | "child+" ->
@@ -382,7 +391,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
              InstMov (OpReg RegSil, OpImm n);
              InstCall (OpLabel "set_child");
            ];
-         Hashtbl.replace context.externs "set_child" ()
+         Hashtbl.replace context.externs "set_child" ();
+         true
        )
      | _ -> assert false)
   | "print_stack" ->
@@ -397,7 +407,8 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
              InstPush (OpImm 0);
            ];
          context.stack <- context.stack + 1;
-         Hashtbl.replace context.externs "print_stack" ()
+         Hashtbl.replace context.externs "print_stack" ();
+         true
        )
      | _ -> assert false)
   | "printf" ->
@@ -410,21 +421,22 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
           InstPush (OpReg RegEax);
         ];
       context.stack <- context.stack + 1;
-      Hashtbl.replace context.externs "printf" ()
+      Hashtbl.replace context.externs "printf" ();
+      true
     )
-  | _ ->
-    (
-      compile_call_args arg_regs args;
-      append_insts
-        [
-          InstCall
-            (match Hashtbl.find_opt context.vars label with
-             | None -> OpLabel label
-             | Some n -> get_var n);
-          InstPush (OpReg RegRax);
-        ];
-      context.stack <- context.stack + 1
-    )
+  | _ -> false
+
+and compile_call_label (label : string) (args : expr_pos list) : unit =
+  compile_call_args arg_regs args;
+  append_insts
+    [
+      InstCall
+        (match Hashtbl.find_opt context.vars label with
+         | None -> OpLabel label
+         | Some n -> get_var n);
+      InstPush (OpReg RegRax);
+    ];
+  context.stack <- context.stack + 1
 
 and compile_branch
     (base : int)
@@ -480,8 +492,7 @@ and compile_switch (expr : expr_pos) (branches : stmt_pos list list) : unit =
   );
   Queue.add (label_table, label_branches) context.tables
 
-and compile_return (expr : expr_pos) : unit =
-  compile_expr expr;
+and compile_return () : unit =
   append_inst (InstPop (OpReg RegRax));
   context.stack <- context.stack - 1;
   if context.stack <> 0 then (
@@ -525,23 +536,12 @@ and compile_stmt : stmt_pos -> unit =
         ];
       context.stack <- context.stack - 2
     )
-  | (StmtReturn ((ExprCall ((ExprVar "=", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "+", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "-", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "*", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "/", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "%", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "printf", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "alloc", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "free", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "get", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "child+", _), _), _) as expr), _)
-  | (StmtReturn ((ExprCall ((ExprVar "print_stack", _), _), _) as expr), _) ->
-    compile_return expr
   | (StmtReturn (ExprSwitch (expr, branches), _), _) ->
     compile_switch expr branches
   | (StmtReturn (ExprCall ((ExprVar label, _), args), _), _) ->
-    (
+    if compile_intrinsic label args then (
+      compile_return ()
+    ) else (
       compile_call_args arg_regs args;
       match Hashtbl.find_opt context.vars label with
       | None ->
@@ -571,7 +571,11 @@ and compile_stmt : stmt_pos -> unit =
       );
       append_inst (InstJmp (OpReg RegR10))
     )
-  | (StmtReturn expr, _) -> compile_return expr
+  | (StmtReturn expr, _) ->
+    (
+      compile_expr expr;
+      compile_return ()
+    )
 
 and compile_stmts : stmt_pos list -> bool =
   function
