@@ -16,6 +16,8 @@ typedef enum {
     TRUE,
 } Bool;
 
+STATIC_ASSERT(sizeof(Bool) == sizeof(u8));
+
 #define ERROR 1
 
 #define EXIT_IF(condition)             \
@@ -39,7 +41,7 @@ typedef struct {
     u8   magic;
 } Header;
 
-STATIC_ASSERT(sizeof(Bool) == sizeof(u8));
+STATIC_ASSERT(sizeof(Header) == sizeof(u64));
 
 typedef union Block Block;
 
