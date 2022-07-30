@@ -31,5 +31,6 @@ syn keyword Function
     \ print_stack
 
 syn match Function "child+"
+syn match Function "child-"
 
 let b:current_syntax = "oc"

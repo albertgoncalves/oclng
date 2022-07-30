@@ -17,11 +17,12 @@ tail l {
     switch (deref l 0) {
         let x ((deref l 2) (deref l 3));
         seta l 0 1;
-        (child+ l 3);
-        seta l 3 x;
+        seta l 2 x;
+        (child- l 3);
+        (child+ l 2);
         x
     } {
-        (deref l 3)
+        (deref l 2)
     }
 }
 

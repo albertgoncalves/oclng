@@ -96,6 +96,11 @@ void set_child(Block* block, u8 child) {
     block[-1].as_header.children |= 1 << child;
 }
 
+void unset_child(Block*, u8);
+void unset_child(Block* block, u8 child) {
+    block[-1].as_header.children &= ~(1 << child);
+}
+
 static Block* into_pointer(u64 address) {
     if ((address % 8) != 0) {
         return NULL;

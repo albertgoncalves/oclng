@@ -395,6 +395,22 @@ and compile_intrinsic (label : string) (args : expr_pos list) : bool =
          true
        )
      | _ -> assert false)
+  | "child-" ->
+    (match args with
+     | [expr; (ExprInt n, _)] ->
+       (
+         assert (n < 32);
+         compile_expr expr;
+         append_insts
+           [
+             InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
+             InstMov (OpReg RegSil, OpImm n);
+             InstCall (OpLabel "unset_child");
+           ];
+         Hashtbl.replace context.externs "unset_child" ();
+         true
+       )
+     | _ -> assert false)
   | "print_stack" ->
     (match args with
      | [] ->
