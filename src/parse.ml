@@ -70,10 +70,8 @@ let at_index (i : int) : char =
   );
   Bytes.get Io.context.source i
 
-let is_digit : char -> bool =
-  function
-  | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
-  | _ -> false
+let is_digit (c : char) : bool =
+  ('0' <= c) && (c <= '9')
 
 let is_lower (c : char) : bool =
   ('a' <= c) && (c <= 'z')
