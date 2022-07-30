@@ -190,18 +190,32 @@ u64 free(u64* base, u64* top) {
     return before - after;
 }
 
+static void print_block(Block* block) {
+    fprintf(stderr,
+            "    [ %p ] { reachable: %hhu, size: %hu, children: 0x%x }\n",
+            (void*)block,
+            block->as_header.reachable,
+            block->as_header.size,
+            block->as_header.children);
+}
+
 void print_heap(void);
 void print_heap(void) {
+    if (!HEAP_LEN) {
+        return;
+    }
     fprintf(stderr, "\nHEAP\n");
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        fprintf(stderr,
-                "    [ %p ] { reachable: %hhu, size: %hu, children: 0x%x }\n",
-                (void*)block,
-                block->as_header.reachable,
-                block->as_header.size,
-                block->as_header.children);
+        print_block(block);
         offset += block->as_header.size;
+    }
+    if (!FREE_LEN) {
+        return;
+    }
+    fprintf(stderr, "\nFREE\n");
+    for (u64 offset = 0; offset < FREE_LEN; offset += sizeof(Block*)) {
+        print_block(FREE_MEMORY[offset / sizeof(Block*)]);
     }
 }
 
