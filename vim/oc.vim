@@ -27,7 +27,7 @@ syn keyword Function
     \ printf
     \ alloc
     \ free
-    \ get
+    \ deref
     \ print_stack
 
 syn match Function "child+"

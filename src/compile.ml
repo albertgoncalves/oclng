@@ -366,7 +366,7 @@ and compile_intrinsic (label : string) (args : expr_pos list) : bool =
          true
        )
      | _ -> assert false)
-  | "get" ->
+  | "deref" ->
     (match args with
      | [expr; (ExprInt offset, _)] ->
        (

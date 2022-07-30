@@ -2,19 +2,19 @@ entry {
     let counter \ {
         let scope (alloc 2);
         seta scope 0 \scope {
-            seta (get scope 1) 0 (+ (get (get scope 1) 0) 1);
-            (get scope 1)
+            seta (deref scope 1) 0 (+ (deref (deref scope 1) 0) 1);
+            (deref scope 1)
         };
         seta scope 1 (alloc 1);
         (child+ scope 1);
-        seta (get scope 1) 0 0;
+        seta (deref scope 1) 0 0;
         scope
     };
     let scope0 (counter);
     let scope1 (counter);
-    ((get scope0 0) scope0);
-    ((get scope1 0) scope1);
-    (printf "%ld\n" (get ((get scope0 0) scope0) 0));
+    ((deref scope0 0) scope0);
+    ((deref scope1 0) scope1);
+    (printf "%ld\n" (deref ((deref scope0 0) scope0) 0));
     (print_stack);
     0
 }

@@ -10,18 +10,18 @@ list h f x {
 }
 
 head l {
-    (get l 1)
+    (deref l 1)
 }
 
 tail l {
-    switch (get l 0) {
-        let x ((get l 2) (get l 3));
+    switch (deref l 0) {
+        let x ((deref l 2) (deref l 3));
         seta l 0 1;
         (child+ l 3);
         seta l 3 x;
         x
     } {
-        (get l 3)
+        (deref l 3)
     }
 }
 
@@ -43,7 +43,7 @@ zip_with l0 l1 {
     (list
         (+ (head l0) (head l1))
         \pair {
-            (zip_with (tail (get pair 0)) (tail (get pair 1)))
+            (zip_with (tail (deref pair 0)) (tail (deref pair 1)))
         }
         pair)
 }

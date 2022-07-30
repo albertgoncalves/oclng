@@ -4,13 +4,13 @@ fib n {
     seta scope 1 1;
     let loop \scope n {
         switch (= n 0) {
-            let a (get scope 0);
-            let b (get scope 1);
+            let a (deref scope 0);
+            let b (deref scope 1);
             seta scope 0 b;
             seta scope 1 (+ a b);
             (loop scope (- n 1))
         } {
-            (get scope 0)
+            (deref scope 0)
         }
     };
     (print_stack);
