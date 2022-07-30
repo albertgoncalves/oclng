@@ -9,6 +9,8 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+STATIC_ASSERT(sizeof(void*) == sizeof(u64));
+
 typedef enum {
     FALSE = 0,
     TRUE,
@@ -43,11 +45,12 @@ typedef union Block Block;
 
 union Block {
     Header as_header;
-    Block* as_child;
+    Block* as_pointer;
+    u64    as_u64;
 };
 
 STATIC_ASSERT(sizeof(Block) == sizeof(u64));
-STATIC_ASSERT(sizeof(Block) == sizeof(void*));
+STATIC_ASSERT(sizeof(Block) == sizeof(Block*));
 
 #define FREE_CAP 1024
 #define HEAP_END (HEAP_CAP - FREE_CAP)
@@ -56,21 +59,10 @@ STATIC_ASSERT(FREE_CAP < HEAP_CAP);
 
 extern Block HEAP_MEMORY[HEAP_CAP / sizeof(Block)];
 
-static Block** FREE_MEMORY = &HEAP_MEMORY[HEAP_END / sizeof(Block)].as_child;
+static Block** FREE_MEMORY = &HEAP_MEMORY[HEAP_END / sizeof(Block)].as_pointer;
 
 static u64 HEAP_LEN = 0;
 static u64 FREE_LEN = 0;
-
-static Bool within_heap(Block* block) {
-    return (HEAP_MEMORY <= block) &&
-           (block < (&HEAP_MEMORY[HEAP_END / sizeof(Block)]));
-}
-
-static Bool valid(Header header) {
-    return (header.magic == 0xFF) && (header.size != 0) &&
-           ((header.size % sizeof(Block)) == 0) &&
-           (!((u8)(~(1 << 0)) & header.reachable));
-}
 
 Block* alloc(u16);
 Block* alloc(u16 size) {
@@ -103,6 +95,33 @@ void set_child(Block* block, u8 child) {
     block[-1].as_header.children |= 1 << child;
 }
 
+static Block* into_pointer(u64 address) {
+    if ((address % 8) != 0) {
+        return NULL;
+    }
+    address -= sizeof(Block*);
+    Block* block = (Block*)address;
+    if (block < HEAP_MEMORY) {
+        return NULL;
+    }
+    if ((&HEAP_MEMORY[HEAP_END / sizeof(Block)]) <= block) {
+        return NULL;
+    }
+    if (block->as_header.magic != 0xFF) {
+        return NULL;
+    }
+    if (block->as_header.size == 0) {
+        return NULL;
+    }
+    if ((block->as_header.size % sizeof(Block)) != 0) {
+        return NULL;
+    }
+    if ((u8)(~(1 << 0)) & block->as_header.reachable) {
+        return NULL;
+    }
+    return block;
+}
+
 static void trace_children(Block* block) {
     for (u32 i = 0; i < 32; ++i) {
         u32 mask = 1 << i;
@@ -110,8 +129,8 @@ static void trace_children(Block* block) {
             break;
         }
         if (block->as_header.children & mask) {
-            Block* child = &block[i + 1].as_child[-1];
-            EXIT_IF(!(within_heap(child) && valid(child->as_header)));
+            Block* child = into_pointer(block[i + 1].as_u64);
+            EXIT_IF(!child);
             if (child->as_header.reachable) {
                 continue;
             }
@@ -126,7 +145,6 @@ u64 free(u64* base, u64* top) {
     u64 before = 0;
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        EXIT_IF(!valid(block->as_header));
         offset += block->as_header.size;
         if (block->as_header.reachable) {
             block->as_header.reachable = FALSE;
@@ -136,11 +154,10 @@ u64 free(u64* base, u64* top) {
     base -= 2;
     top -= 1;
     for (; top < base; --base) {
-        Block* block = &(*(Block**)base)[-1];
-        if (!within_heap(block)) {
+        Block* block = into_pointer(*base);
+        if (!block) {
             continue;
         }
-        EXIT_IF(!valid(block->as_header));
         block->as_header.reachable = TRUE;
         if (block->as_header.reachable) {
             trace_children(block);
@@ -151,7 +168,6 @@ u64 free(u64* base, u64* top) {
         u64 len = 0;
         for (u64 offset = 0; offset < HEAP_LEN;) {
             Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-            EXIT_IF(!valid(block->as_header));
             offset += block->as_header.size;
             if (block->as_header.reachable) {
                 after += block->as_header.size;
@@ -164,7 +180,6 @@ u64 free(u64* base, u64* top) {
     FREE_LEN = 0;
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        EXIT_IF(!valid(block->as_header));
         offset += block->as_header.size;
         if (!block->as_header.reachable) {
             FREE_MEMORY[FREE_LEN / sizeof(Block*)] = block;
@@ -180,7 +195,6 @@ void print_heap(void) {
     fprintf(stderr, "\nHEAP\n");
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
-        EXIT_IF(!valid(block->as_header));
         fprintf(stderr,
                 "    [ %p ] { reachable: %hhu, size: %hu, children: 0x%x }\n",
                 (void*)block,
@@ -197,9 +211,10 @@ void print_stack(u64* base, u64* top) {
     base -= 2;
     top -= 1;
     for (; top < base; --base) {
-        fprintf(stderr, "    [ %p ] %-18p", (void*)base, *(void**)base);
-        Block* block = &(*(Block**)base)[-1];
-        if (within_heap(block) && valid(block->as_header)) {
+        u64 address = *base;
+        fprintf(stderr, "    [ %p ] %-18p", (void*)base, (void*)address);
+        Block* block = into_pointer(address);
+        if (block) {
             fprintf(stderr, " -> { header: %p }", *(void**)block);
         }
         fputc('\n', stderr);
