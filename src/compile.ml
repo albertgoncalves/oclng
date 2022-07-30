@@ -374,6 +374,7 @@ and compile_call_label (label : string) (args : expr_pos list) : unit =
     (match args with
      | [expr; (ExprInt n, _)] ->
        (
+         assert (n < 32);
          compile_expr expr;
          append_insts
            [

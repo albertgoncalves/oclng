@@ -93,7 +93,6 @@ Block* alloc(u16 size) {
 
 void set_child(Block*, u8);
 void set_child(Block* block, u8 child) {
-    EXIT_IF(31 < child);
     block[-1].as_header.children |= 1 << child;
 }
 
