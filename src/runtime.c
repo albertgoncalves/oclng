@@ -123,6 +123,7 @@ static Block* into_pointer(u64 address) {
 }
 
 static void trace(Block* block) {
+    block->as_header.reachable = TRUE;
     if (!block->as_header.children) {
         return;
     }
@@ -136,7 +137,6 @@ static void trace(Block* block) {
         if (child->as_header.reachable) {
             continue;
         }
-        child->as_header.reachable = TRUE;
         trace(child);
     }
 }
@@ -159,10 +159,7 @@ u64 free(u64* base, u64* top) {
         if (!block) {
             continue;
         }
-        block->as_header.reachable = TRUE;
-        if (block->as_header.reachable) {
-            trace(block);
-        }
+        trace(block);
     }
     u64 after = 0;
     {
