@@ -122,21 +122,22 @@ static Block* into_pointer(u64 address) {
     return block;
 }
 
-static void trace_children(Block* block) {
-    for (u32 i = 0; i < 32; ++i) {
-        u32 mask = 1 << i;
-        if (block->as_header.children < mask) {
-            break;
+static void trace(Block* block) {
+    if (!block->as_header.children) {
+        return;
+    }
+    u32 depth = (u32)(32 - __builtin_clz(block->as_header.children));
+    for (u32 i = 0; i < depth; ++i) {
+        if (!(block->as_header.children & (1 << i))) {
+            continue;
         }
-        if (block->as_header.children & mask) {
-            Block* child = into_pointer(block[i + 1].as_u64);
-            EXIT_IF(!child);
-            if (child->as_header.reachable) {
-                continue;
-            }
-            child->as_header.reachable = TRUE;
-            trace_children(child);
+        Block* child = into_pointer(block[i + 1].as_u64);
+        EXIT_IF(!child);
+        if (child->as_header.reachable) {
+            continue;
         }
+        child->as_header.reachable = TRUE;
+        trace(child);
     }
 }
 
@@ -160,7 +161,7 @@ u64 free(u64* base, u64* top) {
         }
         block->as_header.reachable = TRUE;
         if (block->as_header.reachable) {
-            trace_children(block);
+            trace(block);
         }
     }
     u64 after = 0;
