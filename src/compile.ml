@@ -596,7 +596,7 @@ let compile_func (func : func) : unit =
   Printf.fprintf stderr "%s\n" (show_func func);
   context.stack <- 0;
   Hashtbl.clear context.vars;
-  if (fst func.label) = "_entry_" then (
+  if (fst func.label) = "entry_" then (
     context.has_entry <- true
   );
   append_inst (InstLabel (fst func.label));
@@ -629,7 +629,7 @@ let compile (funcs : func Queue.t) : Buffer.t =
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
     "format ELF64\n\
-     public _entry_\n";
+     public entry_\n";
   Hashtbl.iter
     (fun k _ -> Buffer.add_string buffer (Printf.sprintf "extrn %s\n" k))
     context.externs;

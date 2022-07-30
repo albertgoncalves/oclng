@@ -75,6 +75,9 @@ let is_digit : char -> bool =
   | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
   | _ -> false
 
+let is_lower (c : char) : bool =
+  ('a' <= c) && (c <= 'z')
+
 let is_space : char -> bool =
   function
   | '\n' | '\t' | ' ' -> true
@@ -95,8 +98,8 @@ let into_token : (string * Io.position) -> token_pos =
   | ("seta", position) -> (TokenSetA, position)
   | ("switch", position) -> (TokenSwitch, position)
 
-  | ("entry", position) -> (TokenIdent "_entry_", position)
-  | ("loop", position) -> (TokenIdent "_loop_", position)
+  | ("entry", position) -> (TokenIdent "entry_", position)
+  | ("loop", position) -> (TokenIdent "loop_", position)
 
   | (cs, position) ->
     (
@@ -512,6 +515,9 @@ let parse_func (tokens : token_pos Queue.t) : func =
 let parse (tokens : token_pos Queue.t) : func Queue.t =
   let funcs : func Queue.t = Queue.create () in
   while (Queue.length tokens) <> 0 do
-    Queue.add (parse_func tokens) funcs
+    match peek tokens with
+    | (TokenIdent x, _) when is_lower x.[0] ->
+      Queue.add (parse_func tokens) funcs
+    | (_, position) -> Io.exit_at position
   done;
   funcs

@@ -8,12 +8,12 @@ extrn stderr
 
 extrn print_heap
 
-extrn _entry_
+extrn entry_
 
 section '.text' executable
     _start:
         mov rbp, rsp
-        call _entry_
+        call entry_
         push rax
         call print_heap
         mov rdi, [stdout]
