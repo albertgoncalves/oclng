@@ -1,4 +1,5 @@
 fib n {
+    let x (alloc 1);
     let scope (alloc 2);
     seta scope 0 0;
     seta scope 1 1;
@@ -18,6 +19,15 @@ fib n {
 }
 
 entry {
+    # TODO: These two integers have the same values as the two pointers in the
+    # prior function. As such, the garbage-collector is fooled into thinking
+    # those allocations are still alive, and is unable to free memory that is
+    # genuinely out of scope. We can fix this by sacrificing a single bit when
+    # dealing with raw integers, similar to what OCaml does. This would entail
+    # doing some masking and bit-shifting whenever handling integers.
+    let x 4211048;
+    let y 4211064;
     (printf "%ld\n" (fib 51));
+    (free);
     0
 }

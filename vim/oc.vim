@@ -6,7 +6,6 @@ if exists("b:current_syntax")
     finish
 endif
 
-syn match Comment   "#.*$"
 syn match Operator  "[(){};\\=+\-*/%]"
 syn match Number    "\<[0-9]\+\>"
 
@@ -32,5 +31,8 @@ syn keyword Function
 
 syn match Function "child+"
 syn match Function "child-"
+
+syn match Comment "#.*" contains=Todo
+syn keyword Todo FIXME NOTE TODO contained
 
 let b:current_syntax = "oc"
