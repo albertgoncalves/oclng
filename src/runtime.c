@@ -148,10 +148,11 @@ u64 free(u64* base, u64* top) {
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
         offset += block->as_header.size;
-        if (block->as_header.reachable) {
-            block->as_header.reachable = FALSE;
-            before += block->as_header.size;
+        if (!block->as_header.reachable) {
+            continue;
         }
+        block->as_header.reachable = FALSE;
+        before += block->as_header.size;
     }
     base -= 2;
     top -= 1;
@@ -168,10 +169,11 @@ u64 free(u64* base, u64* top) {
         for (u64 offset = 0; offset < HEAP_LEN;) {
             Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
             offset += block->as_header.size;
-            if (block->as_header.reachable) {
-                after += block->as_header.size;
-                len = offset;
+            if (!block->as_header.reachable) {
+                continue;
             }
+            after += block->as_header.size;
+            len = offset;
         }
         EXIT_IF(HEAP_END < len);
         HEAP_LEN = len;
@@ -180,11 +182,12 @@ u64 free(u64* base, u64* top) {
     for (u64 offset = 0; offset < HEAP_LEN;) {
         Block* block = &HEAP_MEMORY[offset / sizeof(Block)];
         offset += block->as_header.size;
-        if (!block->as_header.reachable) {
-            FREE_MEMORY[FREE_LEN / sizeof(Block*)] = block;
-            FREE_LEN += sizeof(Block*);
-            EXIT_IF(FREE_CAP < FREE_LEN);
+        if (block->as_header.reachable) {
+            continue;
         }
+        FREE_MEMORY[FREE_LEN / sizeof(Block*)] = block;
+        FREE_LEN += sizeof(Block*);
+        EXIT_IF(FREE_CAP < FREE_LEN);
     }
     return before - after;
 }
