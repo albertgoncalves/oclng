@@ -616,8 +616,8 @@ let rec opt_push_pop (prev : inst list) : inst list -> inst list =
 let rec opt_jump (prev : inst list) : inst list -> inst list =
   function
   | [] -> List.rev prev
-  | InstJmp (OpLabel label0) :: InstLabel label1 :: insts
-    when label0 = label1 -> opt_jump (InstLabel label1 :: prev) insts
+  | InstJmp (OpLabel label0) :: ((InstLabel label1 :: _) as insts)
+    when label0 = label1 -> opt_jump prev insts
   | inst :: insts -> opt_jump (inst :: prev) insts
 
 let compile (funcs : func Queue.t) : Buffer.t =
