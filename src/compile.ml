@@ -1,5 +1,3 @@
-open Types
-
 type reg =
   | RegRdi
   | RegEdi
@@ -59,7 +57,7 @@ type context =
     strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
-    funcs : func Queue.t;
+    funcs : Parse.func Queue.t;
   }
 
 let context : context =
@@ -158,7 +156,7 @@ let get_var (n : int) : op =
 let compile_string (label : string) : string -> string =
   function
   | "" -> Printf.sprintf "\t%s db 0\n" label
-  | s -> Printf.sprintf "\t%s db %s,0\n" label (show_string s)
+  | s -> Printf.sprintf "\t%s db %s,0\n" label (Parse.show_string s)
 
 let compile_table ((table, branches) : (string * string list)) : string =
   Printf.sprintf "\t%s dq %s\n" table (String.concat "," branches)
@@ -167,7 +165,7 @@ let append_var (var : string) : unit =
   assert (not (Hashtbl.mem context.vars var));
   Hashtbl.add context.vars var context.stack
 
-let rec compile_func_args (regs : reg list) : string_pos list -> unit =
+let rec compile_func_args (regs : reg list) : Parse.string_pos list -> unit =
   function
   | [] -> ()
   | (arg, _) :: args ->
@@ -181,7 +179,7 @@ let rec compile_func_args (regs : reg list) : string_pos list -> unit =
          compile_func_args regs args
        ))
 
-let rec compile_expr : expr_pos -> unit =
+let rec compile_expr : Parse.expr_pos -> unit =
   function
   | (ExprInt n, _) ->
     (
@@ -235,7 +233,7 @@ let rec compile_expr : expr_pos -> unit =
     )
   | (ExprSwitch (expr, branches), _) -> compile_switch expr branches
 
-and compile_call_args (regs : reg list) : expr_pos list -> unit =
+and compile_call_args (regs : reg list) : Parse.expr_pos list -> unit =
   function
   | [] -> ()
   | expr :: exprs ->
@@ -249,7 +247,7 @@ and compile_call_args (regs : reg list) : expr_pos list -> unit =
          context.stack <- context.stack - 1;
        ))
 
-and compile_intrinsic (label : string) (args : expr_pos list) : bool =
+and compile_intrinsic (label : string) (args : Parse.expr_pos list) : bool =
   match label with
   | "=" | "+" | "-" | "*" ->
     (match args with
@@ -442,7 +440,7 @@ and compile_intrinsic (label : string) (args : expr_pos list) : bool =
     )
   | _ -> false
 
-and compile_call_label (label : string) (args : expr_pos list) : unit =
+and compile_call_label (label : string) (args : Parse.expr_pos list) : unit =
   compile_call_args arg_regs args;
   append_insts
     [
@@ -458,7 +456,7 @@ and compile_branch
     (base : int)
     (vars : string list)
     (label_end : string)
-    (stmts : stmt_pos list) : (string * bool) =
+    (stmts : Parse.stmt_pos list) : (string * bool) =
   let label_branch : string = Printf.sprintf "_branch_%d_" (get_k ()) in
   append_inst (InstLabel label_branch);
   context.base <- context.stack;
@@ -484,7 +482,9 @@ and compile_branch
     );
   (label_branch, returned)
 
-and compile_switch (expr : expr_pos) (branches : stmt_pos list list) : unit =
+and compile_switch
+    (expr : Parse.expr_pos)
+    (branches : Parse.stmt_pos list list) : unit =
   let label_table : string = Printf.sprintf "_table_%d_" (get_k ()) in
   let label_end : string = Printf.sprintf "_end_%d_" (get_k ()) in
   compile_expr expr;
@@ -516,7 +516,7 @@ and compile_return () : unit =
   );
   append_inst InstRet
 
-and compile_stmt : stmt_pos -> unit =
+and compile_stmt : Parse.stmt_pos -> unit =
   function
   | (StmtHold expr, _) -> compile_expr expr
   | (StmtDrop expr, _) ->
@@ -593,7 +593,7 @@ and compile_stmt : stmt_pos -> unit =
       compile_return ()
     )
 
-and compile_stmts : stmt_pos list -> bool =
+and compile_stmts : Parse.stmt_pos list -> bool =
   function
   | [] -> false
   | [(StmtReturn _, _) as stmt] ->
@@ -608,8 +608,8 @@ and compile_stmts : stmt_pos list -> bool =
       compile_stmts rest
     )
 
-let compile_func (func : func) : unit =
-  Printf.fprintf stderr "%s\n" (show_func func);
+let compile_func (func : Parse.func) : unit =
+  Printf.fprintf stderr "%s\n" (Parse.show_func func);
   context.stack <- 0;
   Hashtbl.clear context.vars;
   if (fst func.label) = "entry_" then (
@@ -636,7 +636,7 @@ let rec opt_jump (prev : inst list) : inst list -> inst list =
     when label0 = label1 -> opt_jump prev insts
   | inst :: insts -> opt_jump (inst :: prev) insts
 
-let compile (funcs : func Queue.t) : Buffer.t =
+let compile (funcs : Parse.func Queue.t) : Buffer.t =
   Queue.transfer funcs context.funcs;
   while not (Queue.is_empty context.funcs) do
     compile_func (Queue.take context.funcs)
