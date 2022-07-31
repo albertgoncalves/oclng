@@ -194,21 +194,21 @@ let into_token : (string * Io.position) -> token_pos =
   | ("entry", position) -> (TokenIdent "entry_", position)
   | ("loop", position) -> (TokenIdent "loop_", position)
 
-  | (cs, position) ->
+  | (chars, position) ->
     (
-      assert ((String.length cs) <> 0);
-      if String.for_all is_digit cs then
-        (TokenInt (int_of_string cs), position)
+      assert ((String.length chars) <> 0);
+      if String.for_all is_digit chars then
+        (TokenInt (int_of_string chars), position)
       else
-        let n : int = String.length cs in
-        if (cs.[0] = '"') && (cs.[n - 1] = '"') then (
-          (TokenStr (String.sub cs 1 (n - 2)), position)
+        let n : int = String.length chars in
+        if (chars.[0] = '"') && (chars.[n - 1] = '"') then (
+          (TokenStr (String.sub chars 1 (n - 2)), position)
         ) else (
-          assert (not (String.exists is_space cs));
-          if not (cs.[0] <> '_' || cs.[n - 1] <> '_' || cs = "_") then (
+          assert (not (String.exists is_space chars));
+          if not (chars.[0] <> '_' || chars.[n - 1] <> '_' || chars = "_") then (
             Io.exit_at position
           );
-          (TokenIdent cs, position)
+          (TokenIdent chars, position)
         )
     )
 
