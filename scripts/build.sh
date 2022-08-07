@@ -42,8 +42,8 @@ flags_fasm=(
     cp "$WD/src/"*.ml "$WD/build/"
     (
         cd "$WD/build/"
-        ocamlc "${flags_ocaml[@]}" "io.ml" "parse.ml" "compile.ml" "main.ml" \
-            -o "$WD/bin/com"
+        ocamlc "${flags_ocaml[@]}" "io.ml" "parse.ml" "check.ml" "compile.ml" \
+            "main.ml" -o "$WD/bin/com"
     ) &
     clang "${flags_c[@]}" -o "$WD/build/runtime_c.o" "$WD/src/runtime.c" &
     for _ in $(jobs -p); do

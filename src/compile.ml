@@ -51,7 +51,6 @@ type context =
     mutable k : int;
     mutable stack : int;
     mutable base : int;
-    mutable has_entry : bool;
     vars : (string, int) Hashtbl.t;
     insts : inst Queue.t;
     strings : (string, string) Hashtbl.t;
@@ -65,7 +64,6 @@ let context : context =
     k = 0;
     stack = 0;
     base = 0;
-    has_entry = false;
     vars = Hashtbl.create 8;
     insts = Queue.create ();
     strings = Hashtbl.create 64;
@@ -641,9 +639,6 @@ and compile_stmts : Parse.stmt_pos list -> bool =
 let compile_func (func : Parse.func) : unit =
   context.stack <- 0;
   Hashtbl.clear context.vars;
-  if (fst func.label) = "entry_" then (
-    context.has_entry <- true
-  );
   append_inst (InstLabel (fst func.label));
   compile_func_args arg_regs func.args;
   assert (compile_stmts func.body)
@@ -670,7 +665,6 @@ let compile (funcs : Parse.func Queue.t) : Buffer.t =
   while not (Queue.is_empty context.funcs) do
     compile_func (Queue.take context.funcs)
   done;
-  assert (context.has_entry);
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
     "format ELF64\n\
