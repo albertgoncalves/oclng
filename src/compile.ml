@@ -348,6 +348,36 @@ and compile_intrinsic (label : string) (args : Parse.expr_pos list) : bool =
          true
        )
      | _ -> assert false)
+  | "mask" ->
+    (match args with
+     | [expr] ->
+       (
+         compile_expr expr;
+         append_insts
+           [
+             InstPop (OpReg RegRdi);
+             InstCall (OpLabel "mask");
+             InstPush (OpReg RegRax);
+           ];
+         Hashtbl.replace context.externs "mask" ();
+         true
+       )
+     | _ -> assert false)
+  | "unmask" ->
+    (match args with
+     | [expr] ->
+       (
+         compile_expr expr;
+         append_insts
+           [
+             InstPop (OpReg RegRdi);
+             InstCall (OpLabel "unmask");
+             InstPush (OpReg RegRax);
+           ];
+         Hashtbl.replace context.externs "unmask" ();
+         true
+       )
+     | _ -> assert false)
   | "free" ->
     (match args with
      | [] ->

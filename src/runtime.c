@@ -66,6 +66,16 @@ static Block** FREE_MEMORY = &HEAP_MEMORY[HEAP_END / sizeof(Block)].as_pointer;
 static u64 HEAP_LEN = 0;
 static u64 FREE_LEN = 0;
 
+u64 mask(u64);
+u64 mask(u64 x) {
+    return (x << 1ul) | 1ul;
+}
+
+u64 unmask(u64);
+u64 unmask(u64 x) {
+    return x >> 1ul;
+}
+
 Block* alloc(u16);
 Block* alloc(u16 size) {
     EXIT_IF((size == 0) || ((size % sizeof(Block)) != 0));

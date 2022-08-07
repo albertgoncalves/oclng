@@ -27,6 +27,8 @@ syn keyword Function
     \ alloc
     \ free
     \ deref
+    \ mask
+    \ unmask
     \ print_stack
 
 syn match Function "child+"
