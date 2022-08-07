@@ -30,7 +30,7 @@ let load_file (path : string) : unit =
 let position_at (offset : int) : position =
   { path = context.path; source = context.source; offset; }
 
-let exit_at (position : position) : 'a =
+let exit_at (position : position) (message : string) : 'a =
   let rec loop ((row, col) : int * int) (i : int) : (int * int) =
     if i = position.offset then
       (row, col)
@@ -41,5 +41,5 @@ let exit_at (position : position) : 'a =
         | _ -> (row, col + 1) in
       loop (row, col) (i + 1) in
   let (row, col) : (int * int) = loop (1, 1) 0 in
-  Printf.fprintf stderr "%s:%d:%d\n" position.path row col;
+  Printf.fprintf stderr "%s:%d:%d:%s\n" position.path row col message;
   exit 1

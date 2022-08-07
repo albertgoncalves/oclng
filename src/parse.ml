@@ -152,16 +152,24 @@ let get_k () : int =
 let peek (tokens : token_pos Queue.t) : token_pos =
   match Queue.peek_opt tokens with
   | Some token -> token
-  | None -> Io.exit_at (Io.position_at (Io.context.len - 1))
+  | None ->
+    Io.exit_at
+      (Io.position_at (Io.context.len - 1))
+      "reached end of file, no tokens remaining"
 
 let pop (tokens : token_pos Queue.t) : token_pos =
   match Queue.take_opt tokens with
   | Some token -> token
-  | None -> Io.exit_at (Io.position_at (Io.context.len - 1))
+  | None ->
+    Io.exit_at
+      (Io.position_at (Io.context.len - 1))
+      "reached end of file, no tokens remaining"
 
 let at_index (i : int) : char =
   if Io.context.len <= i then (
-    Io.exit_at (Io.position_at (Io.context.len - 1))
+    Io.exit_at
+      (Io.position_at (Io.context.len - 1))
+      "reached end of file, no characters remaining"
   );
   Bytes.get Io.context.source i
 
@@ -205,8 +213,9 @@ let into_token : (string * Io.position) -> token_pos =
           (TokenStr (String.sub chars 1 (n - 2)), position)
         ) else (
           assert (not (String.exists is_space chars));
-          if not (chars.[0] <> '_' || chars.[n - 1] <> '_' || chars = "_") then (
-            Io.exit_at position
+          if not (chars.[0] <> '_' || chars.[n - 1] <> '_' || chars = "_")
+          then (
+            Io.exit_at position (Printf.sprintf "invalid string \"%s\"" chars)
           );
           (TokenIdent chars, position)
         )
@@ -245,7 +254,10 @@ let tokenize () : token_pos Queue.t =
         Buffer.add_char buffer '\\';
         loop_string buffer (i + 1)
       )
-    | _ -> Io.exit_at (Io.position_at i) in
+    | c ->
+      Io.exit_at
+        (Io.position_at i)
+        (Printf.sprintf "unexpected character '%c'" c) in
   let rec loop_token (l : int) (r : int) : unit =
     if l = n then
       ()
@@ -338,6 +350,11 @@ let rec parse_args
     parse_args ((x, position) :: prev) tokens
   | _ -> List.rev prev
 
+let exit_unexpected_token ((token, position) : token_pos) : 'a =
+  Io.exit_at
+    position
+    (Printf.sprintf "unexpected token `%s`" (show_token token))
+
 let parse_block
     (tokens : token_pos Queue.t)
     (f : token_pos Queue.t -> 'a) : 'a =
@@ -346,8 +363,8 @@ let parse_block
     let x : 'a = f tokens in
     (match pop tokens with
      | (TokenRBrace, _) -> x
-     | (_, position) -> Io.exit_at position)
-  | (_, position) -> Io.exit_at position
+     | token -> exit_unexpected_token token)
+  | token -> exit_unexpected_token token
 
 let rec resolve_expr
     (mapping : (string, string) Hashtbl.t) : expr_pos -> expr_pos =
@@ -443,15 +460,18 @@ and parse_call (tokens : token_pos Queue.t) : expr_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenLParen, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok expr -> expr
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing function call" in
   let args : expr_pos list = parse_exprs [] tokens in
   (match pop tokens with
    | (TokenRParen, _) -> ()
-   | (_, position) -> Io.exit_at position);
+   | token -> exit_unexpected_token token);
   (ExprCall (expr, args), position)
 
 and parse_branch
@@ -466,15 +486,18 @@ and parse_switch (tokens : token_pos Queue.t) : expr_pos =
   let p0 : Io.position =
     match pop tokens with
     | (TokenSwitch, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok expr -> expr
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `switch` statement" in
   let (_, p1) : token_pos = peek tokens in
   let branches : stmt_pos list list = parse_branch [] tokens in
   if List.length branches = 0 then (
-    Io.exit_at p1
+    Io.exit_at p1 "`switch` statements require at least one branch"
   );
   (ExprSwitch (expr, branches), p0)
 
@@ -482,7 +505,7 @@ and parse_fn (tokens : token_pos Queue.t) : expr_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSlash, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let args : string_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     return_last [] (parse_block tokens (parse_stmts [])) in
@@ -508,7 +531,7 @@ and parse_stmts
     (prev : stmt_pos list)
     (tokens : token_pos Queue.t) : stmt_pos list =
   match parse_stmt tokens with
-  | Error position -> Io.exit_at position
+  | Error position -> Io.exit_at position "failed to parse statement"
   | Ok stmt ->
     match peek tokens with
     | (TokenSemiC, _) ->
@@ -521,17 +544,20 @@ and parse_stmts
       | (StmtDrop expr, position) ->
         List.rev ((StmtHold expr, position) :: prev)
       | (StmtReturn _, _) -> List.rev (stmt :: prev)
-      | (_, position) -> Io.exit_at position
+      | (_, position) ->
+        Io.exit_at
+          position
+          "blocks must end with a value or a `return` statement"
 
 and parse_let (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenLet, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let var : string =
     match pop tokens with
     | (TokenIdent x, _) -> x
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok (ExprFn func, position) ->
@@ -545,18 +571,21 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
         position
       )
     | Ok expr -> expr
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `let` statement" in
   (StmtLet (var, expr), position)
 
 and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSet, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let var : string =
     match pop tokens with
     | (TokenIdent x, _) -> x
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
     | Ok (ExprFn func, position) ->
@@ -570,33 +599,42 @@ and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
         position
       )
     | Ok expr -> expr
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `set` statement" in
   (StmtSetLocal (var, expr), position)
 
 and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSetA, position) -> position
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let var : expr_pos =
     match parse_expr tokens with
     | Ok var -> var
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `seta` statement" in
   let offset : int =
     match pop tokens with
     | (TokenInt offset, _) -> offset
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let value : expr_pos =
     match parse_expr tokens with
     | Ok value -> value
-    | Error position -> Io.exit_at position in
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `seta` statement" in
   (StmtSetHeap (var, offset, value), position)
 
 let parse_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =
     match pop tokens with
     | (TokenIdent x, position) -> (x, position)
-    | (_, position) -> Io.exit_at position in
+    | token -> exit_unexpected_token token in
   let args : string_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     parse_stmts []
@@ -611,6 +649,6 @@ let parse (tokens : token_pos Queue.t) : func Queue.t =
     match peek tokens with
     | (TokenIdent x, _) when is_lower x.[0] ->
       Queue.add (parse_func tokens) funcs
-    | (_, position) -> Io.exit_at position
+    | token -> exit_unexpected_token token
   done;
   funcs
