@@ -609,7 +609,6 @@ and compile_stmts : Parse.stmt_pos list -> bool =
     )
 
 let compile_func (func : Parse.func) : unit =
-  Printf.fprintf stderr "%s\n" (Parse.show_func func);
   context.stack <- 0;
   Hashtbl.clear context.vars;
   if (fst func.label) = "entry_" then (

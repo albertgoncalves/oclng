@@ -648,7 +648,11 @@ let parse (tokens : token_pos Queue.t) : func Queue.t =
   while (Queue.length tokens) <> 0 do
     match peek tokens with
     | (TokenIdent x, _) when is_lower x.[0] ->
-      Queue.add (parse_func tokens) funcs
+      (
+        let func : func = parse_func tokens in
+        Printf.fprintf stderr "%s\n" (show_func func);
+        Queue.add func funcs
+      )
     | token -> exit_unexpected_token token
   done;
   funcs
