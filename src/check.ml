@@ -1,25 +1,22 @@
 type type' =
-  | TypeVar of int
+  | TypeVar of string
   | TypeRange of (int * int)
   | TypeInt
   | TypeStr
-  | TypeFn of ((type_pos list) * type')
-  | TypeHeap of type_pos list
+  | TypeFunc of ((type' list) * type')
+  | TypeHeap of type' list
 
 and type_pos = (type' * Io.position)
 
 let rec show_type : type' -> string =
   function
-  | TypeVar x -> Printf.sprintf "_%d_" x
+  | TypeVar x -> x
   | TypeRange (l, r) -> Printf.sprintf "[%d, %d]" l r
   | TypeInt -> "int"
   | TypeStr -> "str"
-  | TypeFn (args, type') ->
-    Printf.sprintf
-      "\\%s { %s }"
-      (show_types (List.map fst args))
-      (show_type type')
-  | TypeHeap types -> Printf.sprintf "(%s)" (show_types (List.map fst types))
+  | TypeFunc (args, type') ->
+    Printf.sprintf "\\%s { %s }" (show_types args) (show_type type')
+  | TypeHeap types -> Printf.sprintf "(%s)" (show_types types)
 
 and show_types (types : type' list) : string =
   String.concat " " (List.map show_type types)
@@ -43,6 +40,9 @@ let get_k () : int =
   context.k <- context.k + 1;
   k
 
+let get_var () : string =
+  Printf.sprintf "_%d_" (get_k ())
+
 let walk_func (func : Parse.func) : unit =
   Hashtbl.clear context.bindings;
   let (label, position) : string * Io.position = func.label in
@@ -54,14 +54,29 @@ let walk_func (func : Parse.func) : unit =
        (Printf.sprintf "function `%s` is already defined" label));
   let args : (string * type_pos) list =
     List.map
-      (fun (arg, position) -> (arg, (TypeVar (get_k ()), position)))
+      (fun (arg, position) -> (arg, (TypeVar (get_var ()), position)))
       func.args in
   Hashtbl.add
     context.funcs
     label
-    (TypeFn (List.map snd args, TypeVar (get_k ())), position);
+    (
+      TypeFunc
+        (List.map (fun x -> x |> snd |> fst) args, TypeVar (get_var ())),
+      position
+    );
   List.iter (fun (arg, type') -> Hashtbl.add context.bindings arg type') args;
   ()
+
+let match_or_exit (expected : type') ((found, position) : type_pos) : unit =
+  if found = expected then
+    ()
+  else
+    Io.exit_at
+      position
+      (Printf.sprintf
+         "expected `%s`, found `%s`"
+         (show_type expected)
+         (show_type found))
 
 let check (funcs : Parse.func Queue.t) : unit =
   Queue.iter
@@ -84,9 +99,5 @@ let check (funcs : Parse.func Queue.t) : unit =
        Printf.fprintf stderr "\n")
     funcs;
   match Hashtbl.find_opt context.funcs "entry_" with
-  | Some (TypeFn ([], TypeInt), _) -> ()
-  | Some (_, position) ->
-    Io.exit_at
-      position
-      "`entry` should take no arguments and return an integer value"
+  | Some type' -> match_or_exit (TypeFunc ([], TypeInt)) type'
   | _ -> Io.exit_at (Io.position_at (Io.context.len - 1)) "`entry` not defined"
