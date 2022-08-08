@@ -3,24 +3,25 @@ type type' =
   | TypeRange of (int * int)
   | TypeInt
   | TypeStr
-  | TypeFn of ((type_pos list) * (type_pos option))
-  | TypeHeap of type_pos list option
+  | TypeFn of ((type_pos list) * type')
+  | TypeHeap of type_pos list
 
 and type_pos = (type' * Io.position)
 
-let rec show_type : type_pos -> string =
+let rec show_type : type' -> string =
   function
-  | (TypeVar x, _) -> Printf.sprintf "_%d_" x
-  | (TypeRange (l, r), _) -> Printf.sprintf "[%d, %d]" l r
-  | (TypeInt, _) -> "int"
-  | (TypeStr, _) -> "str"
-  | (TypeFn (args, None), _) -> Printf.sprintf "\\%s { ? }" (show_types args)
-  | (TypeFn (args, Some type'), _) ->
-    Printf.sprintf "\\%s { ? }" (show_types args)
-  | (TypeHeap None, _) -> "(?)"
-  | (TypeHeap Some types, _) -> Printf.sprintf "(%s)" (show_types types)
+  | TypeVar x -> Printf.sprintf "_%d_" x
+  | TypeRange (l, r) -> Printf.sprintf "[%d, %d]" l r
+  | TypeInt -> "int"
+  | TypeStr -> "str"
+  | TypeFn (args, type') ->
+    Printf.sprintf
+      "\\%s { %s }"
+      (show_types (List.map fst args))
+      (show_type type')
+  | TypeHeap types -> Printf.sprintf "(%s)" (show_types (List.map fst types))
 
-and show_types (types : type_pos list) : string =
+and show_types (types : type' list) : string =
   String.concat " " (List.map show_type types)
 
 type context =
@@ -55,7 +56,10 @@ let walk_func (func : Parse.func) : unit =
     List.map
       (fun (arg, position) -> (arg, (TypeVar (get_k ()), position)))
       func.args in
-  Hashtbl.add context.funcs label (TypeFn (List.map snd args, None), position);
+  Hashtbl.add
+    context.funcs
+    label
+    (TypeFn (List.map snd args, TypeVar (get_k ())), position);
   List.iter (fun (arg, type') -> Hashtbl.add context.bindings arg type') args;
   ()
 
@@ -68,15 +72,19 @@ let check (funcs : Parse.func Queue.t) : unit =
          stderr
          "%s = %s\n"
          label
-         (show_type (Hashtbl.find context.funcs label));
+         (show_type (fst (Hashtbl.find context.funcs label)));
        Hashtbl.iter
          (fun label type' ->
-            Printf.fprintf stderr "    %s = %s\n" label (show_type type'))
+            Printf.fprintf
+              stderr
+              "    %s = %s\n"
+              label
+              (show_type (fst type')))
          context.bindings;
        Printf.fprintf stderr "\n")
     funcs;
   match Hashtbl.find_opt context.funcs "entry_" with
-  | Some (TypeFn ([], Some (TypeInt, _)), _) -> ()
+  | Some (TypeFn ([], TypeInt), _) -> ()
   | Some (_, position) ->
     Io.exit_at
       position
