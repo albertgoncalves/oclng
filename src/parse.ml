@@ -48,43 +48,48 @@ let encode (chars : char list) : string =
 let show_string (str : string) : string =
   encode (List.of_seq (String.to_seq str))
 
-let rec show_expr : expr_pos -> string =
+let rec show_expr : expr -> string =
   function
-  | (ExprInt x, _) -> string_of_int x
-  | (ExprStr "", _) -> "\"\""
-  | (ExprStr x, _) -> show_string x
-  | (ExprVar x, _) -> x
-  | (ExprFn func, _) -> fst func.label
-  | (ExprCall (expr, []), _) -> Printf.sprintf "(%s)" (show_expr expr)
-  | (ExprCall (expr, args), _) ->
-    Printf.sprintf "(%s %s)" (show_expr expr) (show_exprs args)
-  | (ExprSwitch (expr, branches), _) ->
+  | ExprInt x -> string_of_int x
+  | ExprStr "" -> "\"\""
+  | ExprStr x -> show_string x
+  | ExprVar x -> x
+  | ExprFn func -> fst func.label
+  | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr_pos expr)
+  | ExprCall (expr, args) ->
+    Printf.sprintf
+      "(%s %s)"
+      (show_expr_pos expr)
+      (args |> List.map fst |> List.map show_expr |> String.concat " ")
+  | ExprSwitch (expr, branches) ->
     Printf.sprintf
       "branch %s { %s }"
-      (show_expr expr)
+      (show_expr_pos expr)
       (
-        String.concat
-          " } { "
-          (
-            List.map
-              (fun s -> String.concat " " (List.map show_stmt s))
-              branches
-          )
+        branches
+        |> List.map
+          (fun s ->
+             String.concat " " (s |> List.map fst |> List.map show_stmt))
+        |> String.concat " } { "
       )
 
-and show_exprs (exprs : expr_pos list) : string =
-  String.concat " " (List.map show_expr exprs)
+and show_expr_pos ((expr, _) : expr_pos) : string =
+  show_expr expr
 
-and show_stmt : stmt_pos -> string =
+and show_stmt : stmt -> string =
   function
-  | (StmtDrop expr, _) -> Printf.sprintf "drop %s" (show_expr expr)
-  | (StmtHold expr, _) -> Printf.sprintf "hold %s" (show_expr expr)
-  | (StmtReturn expr, _) -> Printf.sprintf "return %s" (show_expr expr)
-  | (StmtLet (var, expr), _) -> Printf.sprintf "let %s %s" var (show_expr expr)
-  | (StmtSetLocal (var, expr), _) ->
-    Printf.sprintf "set %s %s" var (show_expr expr)
-  | (StmtSetHeap (var, offset, value), _) ->
-    Printf.sprintf "seta %s %d %s" (show_expr var) offset (show_expr value)
+  | StmtDrop expr -> Printf.sprintf "drop %s" (show_expr_pos expr)
+  | StmtHold expr -> Printf.sprintf "hold %s" (show_expr_pos expr)
+  | StmtReturn expr -> Printf.sprintf "return %s" (show_expr_pos expr)
+  | StmtLet (var, expr) -> Printf.sprintf "let %s %s" var (show_expr_pos expr)
+  | StmtSetLocal (var, expr) ->
+    Printf.sprintf "set %s %s" var (show_expr_pos expr)
+  | StmtSetHeap (var, offset, value) ->
+    Printf.sprintf
+      "seta %s %d %s"
+      (show_expr_pos var)
+      offset
+      (show_expr_pos value)
 
 let show_func (func : func) : string =
   Printf.sprintf
@@ -93,7 +98,9 @@ let show_func (func : func) : string =
      }\n"
     (fst func.label)
     (String.concat " " (List.map fst func.args))
-    (String.concat "\n    " (List.map show_stmt func.body))
+    (String.concat
+       "\n    "
+       (List.map (fun s -> s |> fst |> show_stmt) func.body))
 
 type token =
   | TokenLParen
