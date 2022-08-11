@@ -198,7 +198,7 @@ let rec compile_expr : Parse.expr_pos -> unit =
       append_inst (InstPush (OpLabel label));
       context.stack <- context.stack + 1
     )
-  | (ExprFn func, _) ->
+  | (ExprFunc func, _) ->
     (
       Queue.add func context.funcs;
       append_inst (InstPush (OpLabel (fst func.label)));
@@ -553,7 +553,7 @@ and compile_stmt : Parse.stmt_pos -> unit =
       append_inst (InstDrop 1);
       context.stack <- context.stack - 1
     )
-  | (StmtLet (_, (ExprFn _, _)), _) -> assert false
+  | (StmtLet (_, (ExprFunc _, _)), _) -> assert false
   | (StmtLet (var, expr), _) ->
     (
       compile_expr expr;

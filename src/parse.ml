@@ -10,7 +10,7 @@ and expr =
   | ExprInt of int
   | ExprStr of string
   | ExprVar of string
-  | ExprFn of func
+  | ExprFunc of func
   | ExprCall of (expr_pos * expr_pos list)
   | ExprSwitch of (expr_pos * stmt_pos list list)
 
@@ -54,7 +54,7 @@ let rec show_expr : expr -> string =
   | ExprStr "" -> "\"\""
   | ExprStr x -> show_string x
   | ExprVar x -> x
-  | ExprFn func -> fst func.label
+  | ExprFunc func -> Printf.sprintf "%s { ... }" (fst func.label)
   | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr_pos expr)
   | ExprCall (expr, args) ->
     Printf.sprintf "(%s %s)" (show_expr_pos expr) (show_exprs args)
@@ -387,10 +387,10 @@ let rec resolve_expr
     (match Hashtbl.find_opt mapping var with
      | Some label -> (ExprVar label, position)
      | None -> (ExprVar var, position))
-  | (ExprFn func, position) ->
+  | (ExprFunc func, position) ->
     (
       Printf.fprintf stderr "%s\n" (show_func func);
-      ExprFn
+      ExprFunc
         {
           label = func.label;
           args = func.args;
@@ -419,7 +419,7 @@ and resolve_stmts
     (mapping : (string, string) Hashtbl.t) : stmt_pos list -> stmt_pos list =
   function
   | [] -> []
-  | (StmtLet (var, ((ExprFn func, _) as expr)), position) :: rest ->
+  | (StmtLet (var, ((ExprFunc func, _) as expr)), position) :: rest ->
     (
       Hashtbl.add mapping var (fst func.label);
       let rest : stmt_pos list = resolve_stmts mapping rest in
@@ -461,7 +461,7 @@ let rec parse_expr
     Ok (ExprStr x, position)
   | (TokenLParen, _) -> Ok (parse_call tokens)
   | (TokenSwitch, _) -> Ok (parse_switch tokens)
-  | (TokenSlash, _) -> Ok (parse_fn tokens)
+  | (TokenSlash, _) -> Ok (parse_func tokens)
   | (_, position) -> Error position
 
 and parse_exprs
@@ -516,7 +516,7 @@ and parse_switch (tokens : token_pos Queue.t) : expr_pos =
   );
   (ExprSwitch (expr, branches), p0)
 
-and parse_fn (tokens : token_pos Queue.t) : expr_pos =
+and parse_func (tokens : token_pos Queue.t) : expr_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSlash, position) -> position
@@ -525,7 +525,7 @@ and parse_fn (tokens : token_pos Queue.t) : expr_pos =
   let body : stmt_pos list =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
-  (ExprFn { label = (label, position); args; body; }, position)
+  (ExprFunc { label = (label, position); args; body; }, position)
 
 and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   match peek tokens with
@@ -575,9 +575,9 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
     | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
-    | Ok (ExprFn func, position) ->
+    | Ok (ExprFunc func, position) ->
       (
-        ExprFn
+        ExprFunc
           {
             label = (Printf.sprintf "_%s_%d_" var (get_k ()), position);
             args = func.args;
@@ -603,9 +603,9 @@ and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
     | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
-    | Ok (ExprFn func, position) ->
+    | Ok (ExprFunc func, position) ->
       (
-        ExprFn
+        ExprFunc
           {
             label = (Printf.sprintf "_%s_%d_" var (get_k ()), position);
             args = func.args;
@@ -645,7 +645,7 @@ and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
         "failed to parse expression while parsing `seta` statement" in
   (StmtSetHeap (var, offset, value), position)
 
-let parse_func (tokens : token_pos Queue.t) : func =
+let parse_top_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =
     match pop tokens with
     | (TokenIdent x, position) -> (x, position)
