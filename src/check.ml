@@ -161,85 +161,9 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
      | None ->
        Io.exit_at position (Printf.sprintf "`%s` used before declaration" var)
      | type' -> type')
-  | (ExprCall (expr, expr_args), position) ->
-    (match walk_expr expr with
-     | Some (TypeAny, _) as type' ->
-       (
-         let _ : type_pos option list = List.map walk_expr expr_args in
-         type'
-       )
-     | Some (TypeFunc (type_args, return), position) ->
-       (
-         let len_type_args : int = List.length type_args in
-         let len_expr_args : int = List.length expr_args in
-         if len_type_args = len_expr_args then (
-           List.filter_map walk_expr expr_args
-           |> List.combine type_args
-           |> List.iter
-             (fun (a, b) ->
-                match position with
-                | Some position -> match_or_exit a (patch b position)
-                | None -> match_or_exit a b);
-           Some (return, position)
-         ) else (
-           match position with
-           | Some position ->
-             Io.exit_at
-               position
-               (Printf.sprintf
-                  "`%s` takes %d argument(s) but %d were provided"
-                  (Parse.show_expr_pos expr)
-                  len_type_args
-                  len_expr_args)
-           | None -> assert false
-         )
-       )
-     | Some (TypeVar var, position) -> assert false
-     | Some (type', _) ->
-       Io.exit_at
-         position
-         (Printf.sprintf "function has type `%s`" (show_type type'))
-     | _ -> assert false)
+  | (ExprCall (expr, expr_args), position) -> walk_call expr expr_args position
   | (ExprSwitch (expr, branches), position) ->
-    (
-      let type' : type_pos =
-        match expr with
-        | (ExprCall ((ExprVar "%", _), [expr; (ExprInt n, _)]), position)
-          when 0 < n ->
-          (
-            match walk_expr expr with
-            | Some type' ->
-              (
-                match_or_exit TypeInt type';
-                (TypeRange (0, n - 1), Some position)
-              )
-            | _ -> assert false
-          )
-        | (ExprInt n, position) when 0 <= n ->
-          (TypeRange (0, n), Some position)
-        | _ ->
-          (match walk_expr expr with
-           | Some type' -> type'
-           | None -> assert false) in
-      match_or_exit
-        (TypeRange (0, List.length branches - 1))
-        (patch type' position);
-      let branches : type_pos list =
-        List.concat_map
-          (fun branch ->
-             create_scope ();
-             let type' : type_pos list = List.filter_map walk_stmt branch in
-             destroy_scope ();
-             type')
-          branches in
-      match branches with
-      | (type', _) :: types ->
-        if List.for_all ((=) type') (List.map fst types) then
-          Some (type', Some position)
-        else
-          assert false
-      | [] -> None
-    )
+    walk_switch expr branches position
   | (ExprFunc func, _) ->
     (
       let prev : string = context.func_label in
@@ -249,6 +173,91 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
       context.func_label <- prev;
       Some (Hashtbl.find context.bindings current)
     )
+
+and walk_call
+    (expr : Parse.expr_pos)
+    (expr_args : Parse.expr_pos list)
+    (position : Io.position) : type_pos option =
+  match walk_expr expr with
+  | Some (TypeAny, _) as type' ->
+    (
+      let _ : type_pos option list = List.map walk_expr expr_args in
+      type'
+    )
+  | Some (TypeFunc (type_args, return), position) ->
+    (
+      let len_type_args : int = List.length type_args in
+      let len_expr_args : int = List.length expr_args in
+      if len_type_args = len_expr_args then (
+        List.filter_map walk_expr expr_args
+        |> List.combine type_args
+        |> List.iter
+          (fun (a, b) ->
+             match position with
+             | Some position -> match_or_exit a (patch b position)
+             | None -> match_or_exit a b);
+        Some (return, position)
+      ) else (
+        match position with
+        | Some position ->
+          Io.exit_at
+            position
+            (Printf.sprintf
+               "`%s` takes %d argument(s) but %d were provided"
+               (Parse.show_expr_pos expr)
+               len_type_args
+               len_expr_args)
+        | None -> assert false
+      )
+    )
+  | Some (TypeVar var, position) -> assert false
+  | Some (type', _) ->
+    Io.exit_at
+      position
+      (Printf.sprintf "function has type `%s`" (show_type type'))
+  | _ -> assert false
+
+and walk_switch
+    (expr : Parse.expr_pos)
+    (branches : Parse.stmt_pos list list)
+    (position : Io.position) : type_pos option =
+  let type' : type_pos =
+    match expr with
+    | (ExprCall ((ExprVar "%", _), [expr; (ExprInt n, _)]), position)
+      when 0 < n ->
+      (
+        match walk_expr expr with
+        | Some type' ->
+          (
+            match_or_exit TypeInt type';
+            (TypeRange (0, n - 1), Some position)
+          )
+        | _ -> assert false
+      )
+    | (ExprInt n, position) when 0 <= n ->
+      (TypeRange (0, n), Some position)
+    | _ ->
+      (match walk_expr expr with
+       | Some type' -> type'
+       | None -> assert false) in
+  match_or_exit
+    (TypeRange (0, List.length branches - 1))
+    (patch type' position);
+  let branches : type_pos list =
+    List.concat_map
+      (fun branch ->
+         create_scope ();
+         let type' : type_pos list = List.filter_map walk_stmt branch in
+         destroy_scope ();
+         type')
+      branches in
+  match branches with
+  | (type', _) :: types ->
+    if List.for_all ((=) type') (List.map fst types) then
+      Some (type', Some position)
+    else
+      assert false
+  | [] -> None
 
 and walk_stmt : Parse.stmt_pos -> type_pos option =
   function
