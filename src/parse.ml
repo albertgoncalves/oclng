@@ -95,15 +95,19 @@ and show_stmt : stmt -> string =
       (show_expr_pos value)
 
 let show_func (func : func) : string =
-  Printf.sprintf
-    "%s %s {\n    \
-     %s\n\
-     }\n"
-    (fst func.label)
-    (String.concat " " (List.map fst func.args))
-    (String.concat
-       "\n    "
-       (List.map (fun s -> s |> fst |> show_stmt) func.body))
+  let (label, _) : string * Io.position = func.label in
+  let body : string =
+    String.concat
+      "\n    "
+      (List.map (fun s -> s |> fst |> show_stmt) func.body) in
+  if (List.length func.args) = 0 then
+    Printf.sprintf "%s {\n    %s\n}\n" label body
+  else
+    Printf.sprintf
+      "%s %s {\n    %s\n}\n"
+      label
+      (String.concat " " (List.map fst func.args))
+      body
 
 type token =
   | TokenLParen
@@ -385,6 +389,7 @@ let rec resolve_expr
      | None -> (ExprVar var, position))
   | (ExprFn func, position) ->
     (
+      Printf.fprintf stderr "%s\n" (show_func func);
       ExprFn
         {
           label = func.label;
@@ -651,18 +656,16 @@ let parse_func (tokens : token_pos Queue.t) : func =
     |> parse_block tokens
     |> return_last []
     |> resolve_stmts (Hashtbl.create 16) in
-  { label = (label, position); args; body; }
+  let func : func = { label = (label, position); args; body; } in
+  Printf.fprintf stderr "%s\n" (show_func func);
+  func
 
 let parse (tokens : token_pos Queue.t) : func Queue.t =
   let funcs : func Queue.t = Queue.create () in
   while (Queue.length tokens) <> 0 do
     match peek tokens with
     | (TokenIdent x, _) when is_lower x.[0] ->
-      (
-        let func : func = parse_func tokens in
-        Printf.fprintf stderr "%s\n" (show_func func);
-        Queue.add func funcs
-      )
+      Queue.add (parse_top_func tokens) funcs
     | token -> exit_unexpected_token token
   done;
   funcs
