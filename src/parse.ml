@@ -57,10 +57,7 @@ let rec show_expr : expr -> string =
   | ExprFn func -> fst func.label
   | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr_pos expr)
   | ExprCall (expr, args) ->
-    Printf.sprintf
-      "(%s %s)"
-      (show_expr_pos expr)
-      (args |> List.map fst |> List.map show_expr |> String.concat " ")
+    Printf.sprintf "(%s %s)" (show_expr_pos expr) (show_exprs args)
   | ExprSwitch (expr, branches) ->
     Printf.sprintf
       "branch %s { %s }"
@@ -72,6 +69,12 @@ let rec show_expr : expr -> string =
              String.concat " " (s |> List.map fst |> List.map show_stmt))
         |> String.concat " } { "
       )
+
+and show_exprs (exprs : expr_pos list) : string =
+  exprs
+  |> List.map fst
+  |> List.map show_expr
+  |> String.concat " "
 
 and show_expr_pos ((expr, _) : expr_pos) : string =
   show_expr expr
