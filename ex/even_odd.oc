@@ -1,25 +1,27 @@
+is_even {
+    \x {
+        switch (= x 0) {
+            (is_odd (- x 1))
+        } {
+            1
+        }
+    }
+}
+
+is_odd x {
+    switch (= x 0) {
+        let f (is_even);
+        (f (- x 1))
+    } {
+        0
+    }
+}
+
 entry {
     let x 1234567;
-    let is_even \ {
-        \x {
-            switch (= x 0) {
-                (is_odd (- x 1))
-            } {
-                1
-            }
-        }
-    };
-    let is_odd \x {
-        switch (= x 0) {
-            let f (is_even);
-            (f (- x 1))
-        } {
-            0
-        }
-    };
     (printf
         "%ld is %s\n"
         x
-        switch ((is_even) x) { let y "odd"; y } { "even" });
+        switch (= ((is_even) x) 1) { let y "odd"; y } { "even" });
     0
 }
