@@ -179,9 +179,10 @@ let rec compile_func_args (regs : reg list) : Parse.string_pos list -> unit =
 
 let rec compile_expr : Parse.expr_pos -> unit =
   function
-  | (ExprInt n, _) ->
+  | (ExprInt x, _)
+  | (ExprIndex (x, _, _), _)->
     (
-      append_inst (InstPush (OpImm n));
+      append_inst (InstPush (OpImm x));
       context.stack <- context.stack + 1
     )
   | (ExprStr str, _) ->

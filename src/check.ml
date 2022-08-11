@@ -153,7 +153,8 @@ let prepare (func : Parse.func) : unit =
 
 let rec walk_expr : Parse.expr_pos -> type_pos option =
   function
-  | (ExprInt n, position) -> Some (TypeInt, Some position)
+  | (ExprInt _, position) -> Some (TypeInt, Some position)
+  | (ExprIndex (_, l, r), position) -> Some (TypeRange (l, r), Some position)
   | (ExprStr _, position) -> Some (TypeStr, Some position)
   | (ExprVar var, position) ->
     (match Hashtbl.find_opt context.bindings var with

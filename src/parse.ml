@@ -8,6 +8,7 @@ type stmt =
 
 and expr =
   | ExprInt of int
+  | ExprIndex of (int * int * int)
   | ExprStr of string
   | ExprVar of string
   | ExprFunc of func
@@ -51,6 +52,7 @@ let show_string (str : string) : string =
 let rec show_expr : expr -> string =
   function
   | ExprInt x -> string_of_int x
+  | ExprIndex (x, l, r) -> Printf.sprintf "%d [%d, %d]" x l r
   | ExprStr "" -> "\"\""
   | ExprStr x -> show_string x
   | ExprVar x -> x
@@ -114,6 +116,8 @@ type token =
   | TokenRParen
   | TokenLBrace
   | TokenRBrace
+  | TokenLBracket
+  | TokenRBracket
   | TokenSemiC
   | TokenSlash
 
@@ -135,6 +139,8 @@ let show_token : token -> string =
   | TokenRParen -> ")"
   | TokenLBrace -> "{"
   | TokenRBrace -> "}"
+  | TokenLBracket -> "["
+  | TokenRBracket -> "]"
   | TokenSemiC -> ";"
   | TokenSlash -> "\\"
 
@@ -204,6 +210,8 @@ let into_token : (string * Io.position) -> token_pos =
   | (")", position) -> (TokenRParen, position)
   | ("{", position) -> (TokenLBrace, position)
   | ("}", position) -> (TokenRBrace, position)
+  | ("[", position) -> (TokenLBracket, position)
+  | ("]", position) -> (TokenRBracket, position)
   | (";", position) -> (TokenSemiC, position)
   | ("\\", position) -> (TokenSlash, position)
 
@@ -300,7 +308,7 @@ let tokenize () : token_pos Queue.t =
           let r : int = r + 1 in
           loop_token r r
         )
-      | '(' | ')' | '{' | '}' | ';' | '\\' ->
+      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' ->
         (
           if l <> r then (
             Queue.add
@@ -462,6 +470,7 @@ let rec parse_expr
   | (TokenLParen, _) -> Ok (parse_call tokens)
   | (TokenSwitch, _) -> Ok (parse_switch tokens)
   | (TokenSlash, _) -> Ok (parse_func tokens)
+  | (TokenLBracket, _) -> Ok (parse_range tokens)
   | (_, position) -> Error position
 
 and parse_exprs
@@ -526,6 +535,33 @@ and parse_func (tokens : token_pos Queue.t) : expr_pos =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
   (ExprFunc { label = (label, position); args; body; }, position)
+
+and parse_range (tokens : token_pos Queue.t) : expr_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenLBracket, position) -> position
+    | token -> exit_unexpected_token token in
+  let (x, p0) : int * Io.position =
+    match pop tokens with
+    | (TokenInt x, p0) -> (x, p0)
+    | token -> exit_unexpected_token token in
+  let l : int =
+    match pop tokens with
+    | (TokenInt l, _) -> l
+    | token -> exit_unexpected_token token in
+  let r : int =
+    match pop tokens with
+    | (TokenInt r, _) -> r
+    | token -> exit_unexpected_token token in
+  if (x < l) || (r < x) then (
+    Io.exit_at
+      position
+      (Printf.sprintf "%d not contained within range [%d, %d]" x l r)
+  );
+  (match pop tokens with
+   | (TokenRBracket, _) -> ()
+   | token -> exit_unexpected_token token);
+  (ExprIndex (x, l, r), position)
 
 and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   match peek tokens with
