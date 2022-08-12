@@ -71,13 +71,32 @@ let print_bindings () : unit =
 
 let rec match_or_exit (expected : type') (given : type_pos) : unit =
   match (expected, deref given) with
+  | (TypeFunc (args0, ret0), (TypeFunc (args1, ret1), Some position)) ->
+    (
+      let args0_len : int = List.length args0 in
+      let args1_len : int = List.length args1 in
+      if args0_len <> args1_len then (
+        Io.exit_at
+          position
+          (Printf.sprintf
+             "expected %d arguments, given %d"
+             args0_len
+             args1_len)
+      );
+      List.combine args0 args1
+      |> List.iter (fun (a0, a1) -> match_or_exit a0 (a1, Some position));
+      match_or_exit ret0 (ret1, Some position)
+    )
+  | (TypeFunc _, (TypeFunc _, None)) -> assert false
   | (expected, (given, position)) when expected = given -> ()
   | (TypeVar var, given) ->
     (match Hashtbl.find_opt context.bindings var with
-     | Some _ -> ()
+     | Some (existing, _) -> match_or_exit existing given
      | None -> Hashtbl.add context.bindings var given)
   | (expected, (TypeVar var, position)) ->
-    Hashtbl.add context.bindings var (expected, position)
+    (match Hashtbl.find_opt context.bindings var with
+     | Some existing -> match_or_exit expected existing
+     | None -> Hashtbl.add context.bindings var (expected, position))
   | (_, (_, Some position)) ->
     Io.exit_at
       position
@@ -210,7 +229,34 @@ and walk_call
         | None -> assert false
       )
     )
-  | Some (TypeVar var, position) -> assert false
+  | Some (TypeVar var, position) ->
+    (
+      let type_args : type_pos list = List.filter_map walk_expr expr_args in
+      let len_type_args : int = List.length type_args in
+      let len_expr_args : int = List.length expr_args in
+      if len_type_args <> len_expr_args then (
+        match position with
+        | Some position ->
+          Io.exit_at
+            position
+            (Printf.sprintf
+               "expected %d arguments, given %d"
+               len_type_args
+               len_expr_args)
+        | None -> assert false
+      );
+      let return : type' = get_var () in
+      match Hashtbl.find_opt context.bindings var with
+      | Some _ -> assert false
+      | None ->
+        (
+          Hashtbl.add
+            context.bindings
+            var
+            (TypeFunc (List.map fst type_args, return), position);
+          Some (return, position)
+        )
+    )
   | Some (type', _) ->
     Io.exit_at
       position

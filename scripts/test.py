@@ -57,7 +57,7 @@ class Tests(TestCase):
         self.into_test("fib_tco", 12586269025)
 
     def test_function_pointer(self):
-        self.into_test("function_pointer", -123)
+        self.into_test("function_pointer", "-123\n!")
 
     def test_set_local(self):
         self.into_test("set_local", -4560)

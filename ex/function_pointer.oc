@@ -7,9 +7,18 @@ f3 {
     1
 }
 
+f4 f x {
+    (f x)
+}
+
+f5 x {
+    x
+}
+
 entry {
     let f1 \x { (- (((f0))) x) };
     let f2 f1;
     (printf "%ld\n" (f2 124));
+    (printf "%s\n" (f4 f5 "!"));
     0
 }
