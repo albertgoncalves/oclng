@@ -180,7 +180,7 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
      | None ->
        Io.exit_at position (Printf.sprintf "`%s` used before declaration" var)
      | type' -> type')
-  | (ExprCall (expr, expr_args), position) -> walk_call expr expr_args position
+  | (ExprCall (expr, arg_exprs), position) -> walk_call expr arg_exprs position
   | (ExprSwitch (expr, branches), position) ->
     walk_switch expr branches position
   | (ExprFunc func, _) ->
@@ -195,21 +195,21 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
 
 and walk_call
     (expr : Parse.expr_pos)
-    (expr_args : Parse.expr_pos list)
+    (arg_exprs : Parse.expr_pos list)
     (position : Io.position) : type_pos option =
   match walk_expr expr with
   | Some (TypeAny, _) as type' ->
     (
-      let _ : type_pos option list = List.map walk_expr expr_args in
+      let _ : type_pos option list = List.map walk_expr arg_exprs in
       type'
     )
-  | Some (TypeFunc (type_args, return), position) ->
+  | Some (TypeFunc (arg_types, return), position) ->
     (
-      let len_type_args : int = List.length type_args in
-      let len_expr_args : int = List.length expr_args in
-      if len_type_args = len_expr_args then (
-        List.filter_map walk_expr expr_args
-        |> List.combine type_args
+      let len_arg_exprs : int = List.length arg_exprs in
+      let len_arg_types : int = List.length arg_types in
+      if len_arg_types = len_arg_exprs then (
+        List.filter_map walk_expr arg_exprs
+        |> List.combine arg_types
         |> List.iter
           (fun (a, b) ->
              match position with
@@ -224,25 +224,25 @@ and walk_call
             (Printf.sprintf
                "`%s` takes %d argument(s) but %d were provided"
                (Parse.show_expr_pos expr)
-               len_type_args
-               len_expr_args)
+               len_arg_types
+               len_arg_exprs)
         | None -> assert false
       )
     )
   | Some (TypeVar var, position) ->
     (
-      let type_args : type_pos list = List.filter_map walk_expr expr_args in
-      let len_type_args : int = List.length type_args in
-      let len_expr_args : int = List.length expr_args in
-      if len_type_args <> len_expr_args then (
+      let arg_types : type_pos list = List.filter_map walk_expr arg_exprs in
+      let len_arg_exprs : int = List.length arg_exprs in
+      let len_arg_types : int = List.length arg_types in
+      if len_arg_types <> len_arg_exprs then (
         match position with
         | Some position ->
           Io.exit_at
             position
             (Printf.sprintf
                "expected %d arguments, given %d"
-               len_type_args
-               len_expr_args)
+               len_arg_types
+               len_arg_exprs)
         | None -> assert false
       );
       let return : type' = get_var () in
@@ -253,7 +253,7 @@ and walk_call
           Hashtbl.add
             context.bindings
             var
-            (TypeFunc (List.map fst type_args, return), position);
+            (TypeFunc (List.map fst arg_types, return), position);
           Some (return, position)
         )
     )
@@ -315,10 +315,10 @@ and walk_stmt : Parse.stmt_pos -> type_pos option =
   | (StmtHold expr, _) -> walk_expr expr
   | (StmtReturn expr, _) ->
     (match Hashtbl.find context.bindings context.func_label with
-     | (TypeFunc (args, type_return), Some position) ->
+     | (TypeFunc (args, return_type), Some position) ->
        (
          (match walk_expr expr with
-          | Some type' -> match_or_exit type_return (patch type' position)
+          | Some type' -> match_or_exit return_type (patch type' position)
           | None -> ());
          None
        )
@@ -354,8 +354,8 @@ and walk_func (func : Parse.func) : unit =
      Hashtbl.find_opt context.funcs label,
      Hashtbl.find_opt context.bindings label
    ) with
-   | (Some label_args, Some (TypeFunc (type_args, _), position)) ->
-     List.combine label_args type_args
+   | (Some arg_labels, Some (TypeFunc (arg_types, _), position)) ->
+     List.combine arg_labels arg_types
      |> List.iter
        (fun (arg, type') ->
           Hashtbl.add context.bindings arg (type', position);
@@ -364,8 +364,8 @@ and walk_func (func : Parse.func) : unit =
           Stack.push scope context.scopes)
    | _ -> assert false);
   let _ : type_pos option list = List.map walk_stmt func.body in
-  print_bindings ();
-  destroy_scope ()
+  destroy_scope ();
+  print_bindings ()
 
 let set_intrinsic (label : string) (type' : type') : unit =
   Hashtbl.add context.bindings label (type', None)
