@@ -205,9 +205,9 @@ and walk_call
     )
   | Some (TypeFunc (arg_types, return), position) ->
     (
-      let len_arg_exprs : int = List.length arg_exprs in
-      let len_arg_types : int = List.length arg_types in
-      if len_arg_types = len_arg_exprs then (
+      let arg_exprs_len : int = List.length arg_exprs in
+      let arg_types_len : int = List.length arg_types in
+      if arg_types_len = arg_exprs_len then (
         List.filter_map walk_expr arg_exprs
         |> List.combine arg_types
         |> List.iter
@@ -224,25 +224,25 @@ and walk_call
             (Printf.sprintf
                "`%s` takes %d argument(s) but %d were provided"
                (Parse.show_expr_pos expr)
-               len_arg_types
-               len_arg_exprs)
+               arg_types_len
+               arg_exprs_len)
         | None -> assert false
       )
     )
   | Some (TypeVar var, position) ->
     (
       let arg_types : type_pos list = List.filter_map walk_expr arg_exprs in
-      let len_arg_exprs : int = List.length arg_exprs in
-      let len_arg_types : int = List.length arg_types in
-      if len_arg_types <> len_arg_exprs then (
+      let arg_exprs_len : int = List.length arg_exprs in
+      let arg_types_len : int = List.length arg_types in
+      if arg_types_len <> arg_exprs_len then (
         match position with
         | Some position ->
           Io.exit_at
             position
             (Printf.sprintf
                "expected %d arguments, given %d"
-               len_arg_types
-               len_arg_exprs)
+               arg_types_len
+               arg_exprs_len)
         | None -> assert false
       );
       let return : type' = get_var () in
