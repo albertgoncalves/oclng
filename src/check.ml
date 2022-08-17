@@ -235,55 +235,46 @@ and walk_call
       let _ : type_pos option list = List.map walk_expr arg_exprs in
       type'
     )
-  | Some (TypeFunc (arg_types, return), position) ->
+  | Some (TypeFunc (arg_types, return), _) ->
     (
       let arg_exprs_len : int = List.length arg_exprs in
       let arg_types_len : int = List.length arg_types in
       if arg_types_len <> arg_exprs_len then (
-        match position with
-        | Some position ->
-          Io.exit_at
-            position
-            (Printf.sprintf
-               "`%s` takes %d argument(s) but %d were provided"
-               (Parse.show_expr_pos expr)
-               arg_types_len
-               arg_exprs_len)
-        | None -> assert false
+        Io.exit_at
+          position
+          (Printf.sprintf
+             "`%s` takes %d argument(s) but %d were provided"
+             (Parse.show_expr_pos expr)
+             arg_types_len
+             arg_exprs_len)
       );
       let n : int = Stack.length context.generics in
       let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
       assert (arg_exprs_len = (List.length expr_types));
       List.iter
-        (fun (a, b) ->
-           match position with
-           | Some position -> match_or_exit a (patch b position)
-           | None -> match_or_exit a b)
+        (fun (a, b) -> match_or_exit a (patch b position))
         (List.combine arg_types expr_types);
       let return : type_pos =
         match return with
         | TypeGeneric var -> Hashtbl.find context.bindings var
-        | _ -> (return, position) in
+        | _ -> (return, Some position) in
       while n < (Stack.length context.generics) do
         Hashtbl.remove context.bindings (Stack.pop context.generics)
       done;
       Some return
     )
-  | Some (TypeVar var, position) ->
+  | Some (TypeVar var, _) ->
     (
       let arg_types : type_pos list = List.filter_map walk_expr arg_exprs in
       let arg_exprs_len : int = List.length arg_exprs in
       let arg_types_len : int = List.length arg_types in
       if arg_types_len <> arg_exprs_len then (
-        match position with
-        | Some position ->
-          Io.exit_at
-            position
-            (Printf.sprintf
-               "expected %d arguments, given %d"
-               arg_types_len
-               arg_exprs_len)
-        | None -> assert false
+        Io.exit_at
+          position
+          (Printf.sprintf
+             "expected %d arguments, given %d"
+             arg_types_len
+             arg_exprs_len)
       );
       let return : type' = get_var () in
       match Hashtbl.find_opt context.bindings var with
@@ -293,8 +284,8 @@ and walk_call
           Hashtbl.add
             context.bindings
             var
-            (TypeFunc (List.map fst arg_types, return), position);
-          Some (return, position)
+            (TypeFunc (List.map fst arg_types, return), Some position);
+          Some (return, Some position)
         )
     )
   | Some (type', _) ->
