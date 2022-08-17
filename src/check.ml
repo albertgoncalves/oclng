@@ -235,22 +235,7 @@ and walk_call
     (
       let arg_exprs_len : int = List.length arg_exprs in
       let arg_types_len : int = List.length arg_types in
-      if arg_types_len = arg_exprs_len then (
-        let n : int = Stack.length context.generics in
-        let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
-        assert (arg_exprs_len = (List.length expr_types));
-        List.iter
-          (fun (a, b) ->
-             match position with
-             | Some position -> match_or_exit a (patch b position)
-             | None -> match_or_exit a b)
-          (List.combine arg_types expr_types);
-        while n < (Stack.length context.generics) do
-          let var : string = Stack.pop context.generics in
-          Hashtbl.remove context.bindings var
-        done;
-        Some (return, position)
-      ) else (
+      if arg_types_len <> arg_exprs_len then (
         match position with
         | Some position ->
           Io.exit_at
@@ -261,7 +246,21 @@ and walk_call
                arg_types_len
                arg_exprs_len)
         | None -> assert false
-      )
+      );
+      let n : int = Stack.length context.generics in
+      let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
+      assert (arg_exprs_len = (List.length expr_types));
+      List.iter
+        (fun (a, b) ->
+           match position with
+           | Some position -> match_or_exit a (patch b position)
+           | None -> match_or_exit a b)
+        (List.combine arg_types expr_types);
+      while n < (Stack.length context.generics) do
+        let var : string = Stack.pop context.generics in
+        Hashtbl.remove context.bindings var
+      done;
+      Some (return, position)
     )
   | Some (TypeVar var, position) ->
     (
