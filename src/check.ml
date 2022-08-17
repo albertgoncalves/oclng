@@ -6,6 +6,7 @@ type type' =
   | TypeStr
   | TypeFunc of ((type' list) * type')
   | TypeHeap of type' list
+  | TypeGeneric of string
 
 and type_pos = (type' * (Io.position option))
 
@@ -19,6 +20,7 @@ let rec show_type : type' -> string =
   | TypeFunc (args, return) ->
     Printf.sprintf "\\%s { %s }" (show_types args) (show_type return)
   | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
+  | TypeGeneric var -> Printf.sprintf "'%s" var
 
 and show_types (types : type' list) : string =
   String.concat " " (List.map show_type types)
@@ -30,6 +32,7 @@ type context =
     funcs : (string, string list) Hashtbl.t;
     vars : string Queue.t;
     scopes : string Stack.t Stack.t;
+    generics : string Stack.t;
     mutable func_label : string;
   }
 
@@ -40,6 +43,7 @@ let context : context =
     funcs = Hashtbl.create 32;
     vars = Queue.create ();
     scopes = Stack.create ();
+    generics = Stack.create ();
     func_label = "";
   }
 
@@ -71,6 +75,22 @@ let print_bindings () : unit =
 
 let rec match_or_exit (expected : type') (given : type_pos) : unit =
   match (expected, deref given) with
+  | (TypeGeneric var, given) ->
+    (match Hashtbl.find_opt context.bindings var with
+     | Some (existing, _) -> match_or_exit existing given
+     | None ->
+       (
+         Stack.push var context.generics;
+         Hashtbl.add context.bindings var given
+       ))
+  | (expected, (TypeGeneric var, position)) ->
+    (match Hashtbl.find_opt context.bindings var with
+     | Some existing -> match_or_exit expected existing
+     | None ->
+       (
+         Stack.push var context.generics;
+         Hashtbl.add context.bindings var (expected, position)
+       ))
   | (TypeFunc (args0, ret0), (TypeFunc (args1, ret1), Some position)) ->
     (
       let args0_len : int = List.length args0 in
@@ -117,6 +137,14 @@ let rec swap
       (List.map (swap target replacement) args, swap target replacement return)
   | TypeHeap items -> TypeHeap (List.map (swap target replacement) items)
   | _ -> existing
+
+let rec get_generic : type' -> type' =
+  function
+  | TypeVar var -> TypeGeneric var
+  | TypeFunc (args, return) ->
+    TypeFunc (List.map get_generic args, get_generic return)
+  | TypeHeap items -> TypeHeap (List.map get_generic items)
+  | type' -> type'
 
 let resolve () : unit =
   let remaining : string Queue.t = Queue.create () in
@@ -208,13 +236,19 @@ and walk_call
       let arg_exprs_len : int = List.length arg_exprs in
       let arg_types_len : int = List.length arg_types in
       if arg_types_len = arg_exprs_len then (
-        List.filter_map walk_expr arg_exprs
-        |> List.combine arg_types
-        |> List.iter
+        let n : int = Stack.length context.generics in
+        let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
+        assert (arg_exprs_len = (List.length expr_types));
+        List.iter
           (fun (a, b) ->
              match position with
              | Some position -> match_or_exit a (patch b position)
-             | None -> match_or_exit a b);
+             | None -> match_or_exit a b)
+          (List.combine arg_types expr_types);
+        while n < (Stack.length context.generics) do
+          let var : string = Stack.pop context.generics in
+          Hashtbl.remove context.bindings var
+        done;
         Some (return, position)
       ) else (
         match position with
@@ -365,6 +399,15 @@ and walk_func (func : Parse.func) : unit =
    | _ -> assert false);
   let _ : type_pos option list = List.map walk_stmt func.body in
   destroy_scope ();
+  (
+    match Hashtbl.find context.bindings context.func_label with
+    | (TypeFunc (args, return), position) ->
+      Hashtbl.replace
+        context.bindings
+        context.func_label
+        (TypeFunc (List.map get_generic args, get_generic return), position)
+    | _ -> assert false
+  );
   print_bindings ()
 
 let set_intrinsic (label : string) (type' : type') : unit =

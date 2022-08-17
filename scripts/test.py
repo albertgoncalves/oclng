@@ -59,6 +59,9 @@ class Tests(TestCase):
     def test_function_pointer(self):
         self.into_test("function_pointer", "-123\n!")
 
+    def test_generic(self):
+        self.into_test("generic", "0\na\n-1\nb")
+
     def test_set_local(self):
         self.into_test("set_local", -4560)
 

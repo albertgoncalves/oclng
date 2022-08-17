@@ -1,0 +1,21 @@
+f0 x {
+    x
+}
+
+f1 x {
+    (- 0 x)
+}
+
+f2 f x {
+    (f x)
+}
+
+entry {
+    (printf
+        "%ld\n%s\n%ld\n%s\n"
+        (f0 0)
+        (f0 "a")
+        (f1 1)
+        (f2 f0 "b"));
+    0
+}
