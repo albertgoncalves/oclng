@@ -13,7 +13,7 @@ f2 f x {
 entry {
     (printf
         "%ld\n%s\n%ld\n%s\n"
-        (f0 0)
+        (- (+ 1 (f0 0)) 1)
         (f0 "a")
         (f1 1)
         (f2 f0 "b"));

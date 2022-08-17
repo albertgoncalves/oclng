@@ -15,10 +15,14 @@ f5 x {
     x
 }
 
+f6 {
+    f4
+}
+
 entry {
     let f1 \x { (- (((f0))) x) };
     let f2 f1;
     (printf "%ld\n" (f2 124));
-    (printf "%s\n" (f4 f5 "!"));
+    (printf "%s\n" ((f6) f5 "!"));
     0
 }
