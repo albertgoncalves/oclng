@@ -83,14 +83,7 @@ let rec match_or_exit (expected : type') (given : type_pos) : unit =
          Stack.push var context.generics;
          Hashtbl.add context.bindings var given
        ))
-  | (expected, (TypeGeneric var, position)) ->
-    (match Hashtbl.find_opt context.bindings var with
-     | Some existing -> match_or_exit expected existing
-     | None ->
-       (
-         Stack.push var context.generics;
-         Hashtbl.add context.bindings var (expected, position)
-       ))
+  | (_ , (TypeGeneric _, _)) -> assert false
   | (TypeFunc (args0, ret0), (TypeFunc (args1, ret1), Some position)) ->
     (
       let args0_len : int = List.length args0 in
@@ -198,6 +191,17 @@ let prepare (func : Parse.func) : unit =
     label
     (TypeFunc (List.map snd args, get_var ()), Some position)
 
+let rec find_vars (vars : string list) : type' -> string list =
+  function
+  | TypeVar var -> var :: vars
+  | TypeFunc (args, return) ->
+    List.rev_append
+      (List.concat_map (find_vars []) args)
+      (find_vars vars return)
+  | TypeHeap items ->
+    List.rev_append (List.concat_map (find_vars []) items) vars
+  | _ -> vars
+
 let rec walk_expr : Parse.expr_pos -> type_pos option =
   function
   | (ExprInt _, position) -> Some (TypeInt, Some position)
@@ -256,11 +260,14 @@ and walk_call
            | Some position -> match_or_exit a (patch b position)
            | None -> match_or_exit a b)
         (List.combine arg_types expr_types);
+      let return : type_pos =
+        match return with
+        | TypeGeneric var -> Hashtbl.find context.bindings var
+        | _ -> (return, position) in
       while n < (Stack.length context.generics) do
-        let var : string = Stack.pop context.generics in
-        Hashtbl.remove context.bindings var
+        Hashtbl.remove context.bindings (Stack.pop context.generics)
       done;
-      Some (return, position)
+      Some return
     )
   | Some (TypeVar var, position) ->
     (
@@ -401,10 +408,15 @@ and walk_func (func : Parse.func) : unit =
   (
     match Hashtbl.find context.bindings context.func_label with
     | (TypeFunc (args, return), position) ->
+      let vars : string list = List.concat_map (find_vars []) args in
+      let return : type' =
+        match return with
+        | TypeVar var when List.mem var vars -> get_generic return
+        | _ -> return in
       Hashtbl.replace
         context.bindings
         context.func_label
-        (TypeFunc (List.map get_generic args, get_generic return), position)
+        (TypeFunc (List.map get_generic args, return), position)
     | _ -> assert false
   );
   print_bindings ()
@@ -422,6 +434,7 @@ let check (funcs : Parse.func Queue.t) : unit =
   set_intrinsic "%" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   Queue.iter prepare funcs;
   Queue.iter walk_func funcs;
+  assert ((Stack.length context.generics) = 0);
   match Hashtbl.find_opt context.bindings "entry_" with
   | Some type' -> match_or_exit (TypeFunc ([], TypeInt)) type'
   | _ -> Io.exit_at (Io.position_at (Io.context.len - 1)) "`entry` not defined"
