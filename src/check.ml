@@ -75,6 +75,7 @@ let print_bindings () : unit =
 
 let rec match_or_exit (expected : type') (given : type_pos) : unit =
   match (expected, deref given) with
+  | (_, (_, None)) -> assert false
   | (TypeGeneric var, given) ->
     (match Hashtbl.find_opt context.bindings var with
      | Some (existing, _) -> match_or_exit existing given
@@ -100,7 +101,6 @@ let rec match_or_exit (expected : type') (given : type_pos) : unit =
       |> List.iter (fun (a0, a1) -> match_or_exit a0 (a1, Some position));
       match_or_exit ret0 (ret1, Some position)
     )
-  | (TypeFunc _, (TypeFunc _, None)) -> assert false
   | (expected, (given, position)) when expected = given -> ()
   | (TypeVar var, given) ->
     (match Hashtbl.find_opt context.bindings var with
@@ -117,7 +117,6 @@ let rec match_or_exit (expected : type') (given : type_pos) : unit =
          "expected `%s`, given `%s`"
          (show_type expected)
          (show_type (fst given)))
-  | _ -> assert false
 
 let rec swap
     (target : string)
@@ -159,11 +158,6 @@ let resolve () : unit =
     | None -> Queue.add label remaining
   done;
   Queue.transfer remaining context.vars
-
-let patch ((type', pos0) : type_pos) (pos1 : Io.position) : type_pos =
-  match pos0 with
-  | Some position -> (type', pos0)
-  | None -> (type', Some pos1)
 
 let create_scope () : unit =
   Stack.push (Stack.create ()) context.scopes
@@ -252,7 +246,7 @@ and walk_call
       let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
       assert (arg_exprs_len = (List.length expr_types));
       List.iter
-        (fun (a, b) -> match_or_exit a (patch b position))
+        (fun (a, b) -> match_or_exit a b)
         (List.combine arg_types expr_types);
       let return : type_pos =
         match return with
@@ -316,9 +310,7 @@ and walk_switch
       (match walk_expr expr with
        | Some type' -> type'
        | None -> assert false) in
-  match_or_exit
-    (TypeRange (0, List.length branches - 1))
-    (patch type' position);
+  match_or_exit (TypeRange (0, List.length branches - 1)) type';
   let branches : type_pos list =
     List.concat_map
       (fun branch ->
@@ -348,7 +340,7 @@ and walk_stmt : Parse.stmt_pos -> type_pos option =
      | (TypeFunc (args, return_type), Some position) ->
        (
          (match walk_expr expr with
-          | Some type' -> match_or_exit return_type (patch type' position)
+          | Some type' -> match_or_exit return_type type'
           | None -> ());
          None
        )
