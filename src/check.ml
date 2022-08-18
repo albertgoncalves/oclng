@@ -61,7 +61,7 @@ let rec deref : type_pos -> type_pos =
   function
   | (TypeVar var, position) as type' ->
     (match Hashtbl.find_opt context.bindings var with
-     | Some type' -> deref (type')
+     | Some type' -> deref type'
      | None -> type')
   | type' -> type'
 
@@ -311,8 +311,7 @@ and walk_switch
           )
         | _ -> assert false
       )
-    | (ExprInt n, position) when 0 <= n ->
-      (TypeRange (0, n), Some position)
+    | (ExprInt n, position) when 0 <= n -> (TypeRange (0, n), Some position)
     | _ ->
       (match walk_expr expr with
        | Some type' -> type'
