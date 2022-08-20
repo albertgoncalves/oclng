@@ -84,7 +84,7 @@ let rec match_or_exit (expected : type') (given : type_pos) : unit =
          Stack.push var context.generics;
          Hashtbl.add context.bindings var given
        ))
-  | (_ , (TypeGeneric _, _)) -> assert false
+  | (_, (TypeGeneric _, _)) -> assert false
   | (TypeFunc (args0, ret0), (TypeFunc (args1, ret1), Some position)) ->
     (
       let args0_len : int = List.length args0 in
