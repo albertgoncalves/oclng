@@ -66,7 +66,10 @@ let rec deref : type_pos -> type_pos =
   | type' -> type'
 
 let print_bindings () : unit =
-  Printf.fprintf stderr "%s {\n" context.func_label;
+  if context.func_label = "" then
+    Printf.fprintf stderr "{\n"
+  else
+    Printf.fprintf stderr "%s {\n" context.func_label;
   Hashtbl.iter
     (fun label type' ->
        Printf.fprintf stderr "    %-8s : %s\n" label (show_type (fst type')))
@@ -141,7 +144,7 @@ let rec get_generic : type' -> type' =
 let resolve () : unit =
   let remaining : string Queue.t = Queue.create () in
   while not (Queue.is_empty context.vars) do
-    let label : string = Queue.pop context.vars in
+    let label : string = Queue.take context.vars in
     match Hashtbl.find_opt context.bindings label with
     | Some (type', _) ->
       (
