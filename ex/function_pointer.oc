@@ -1,3 +1,11 @@
+entry {
+    let f1 \x { (- (((f0))) x) };
+    let f2 f1;
+    (printf "%ld\n" (f2 124));
+    (printf "%s\n" ((f6) f5 "!"));
+    0
+}
+
 f0 {
     let f \ { f3 };
     f
@@ -17,12 +25,4 @@ f5 x {
 
 f6 {
     f4
-}
-
-entry {
-    let f1 \x { (- (((f0))) x) };
-    let f2 f1;
-    (printf "%ld\n" (f2 124));
-    (printf "%s\n" ((f6) f5 "!"));
-    0
 }

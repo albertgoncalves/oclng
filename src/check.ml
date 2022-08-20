@@ -76,6 +76,18 @@ let print_bindings () : unit =
     context.bindings;
   Printf.fprintf stderr "}\n\n"
 
+let print_graph
+    (graph : (string, (string, unit) Hashtbl.t) Hashtbl.t) : unit =
+  Hashtbl.iter
+    (fun parent children ->
+       Printf.fprintf stderr "%-8s[ " parent;
+       Hashtbl.iter
+         (fun child _ -> Printf.fprintf stderr "%s " child)
+         children;
+       Printf.fprintf stderr "]\n")
+    graph;
+  Printf.fprintf stderr "\n"
+
 let rec match_or_exit (expected : type') (given : type_pos) : unit =
   match (expected, deref given) with
   | (_, (_, None)) -> assert false
@@ -409,6 +421,85 @@ and walk_func (func : Parse.func) : unit =
 let set_intrinsic (label : string) (type' : type') : unit =
   Hashtbl.add context.bindings label (type', None)
 
+let reorder (funcs : Parse.func Queue.t) : unit =
+  let graph : (string, (string, unit) Hashtbl.t) Hashtbl.t =
+    Hashtbl.create 16 in
+  Queue.iter
+    (fun (func : Parse.func) ->
+       Hashtbl.add graph (fst func.label) (Hashtbl.create 8))
+    funcs;
+  let locals : Parse.func Stack.t = Stack.create () in
+  let rec f0 (parent : string) (expr : Parse.expr_pos) : unit =
+    match fst expr with
+    | Parse.ExprInt _
+    | Parse.ExprIndex _
+    | Parse.ExprStr _ -> ()
+    | Parse.ExprVar var ->
+      if Hashtbl.mem graph var then (
+        Hashtbl.replace (Hashtbl.find graph parent) var ()
+      )
+    | Parse.ExprFunc func ->
+      (
+        Stack.push func locals;
+        Hashtbl.replace (Hashtbl.find graph parent) (fst func.label) ()
+      )
+    | Parse.ExprCall (expr, args) ->
+      (
+        f0 parent expr;
+        List.iter (f0 parent) args
+      )
+    | Parse.ExprSwitch (expr, branches) ->
+      (
+        f0 parent expr;
+        List.iter (List.iter (f1 parent)) branches
+      )
+  and f1 (parent : string) (stmt : Parse.stmt_pos) : unit =
+    match fst stmt with
+    | Parse.StmtDrop expr
+    | Parse.StmtHold expr
+    | Parse.StmtReturn expr
+    | Parse.StmtLet (_, expr)
+    | Parse.StmtSetLocal (_, expr) -> f0 parent expr
+    | Parse.StmtSetHeap _ -> assert false in
+  Queue.iter
+    (fun (func : Parse.func) -> List.iter (f1 (fst func.label)) func.body)
+    funcs;
+  while not (Stack.is_empty locals) do
+    let func : Parse.func = (Stack.pop locals) in
+    let label : string = fst func.label in
+    assert (not (Hashtbl.mem graph label));
+    Hashtbl.add graph label (Hashtbl.create 8);
+    List.iter (f1 label) func.body
+  done;
+  print_graph graph;
+  let ordering : string Queue.t =  Queue.create () in
+  let parents : (string * (string, unit) Hashtbl.t) Queue.t =
+    Queue.of_seq (Hashtbl.to_seq graph) in
+  let visited : (string, unit) Hashtbl.t = Hashtbl.create 8 in
+  while not (Queue.is_empty parents) do
+    let (parent, children) : (string * (string, unit) Hashtbl.t) =
+      Queue.take parents in
+    if ((Hashtbl.length children) = 0) || (Hashtbl.mem visited parent) then (
+      Queue.add parent ordering;
+      Queue.iter (fun (_, children) -> Hashtbl.remove children parent) parents;
+      Hashtbl.clear visited
+    ) else (
+      Queue.add (parent, children) parents;
+      Hashtbl.add visited parent ()
+    )
+  done;
+  let mapping : (string, Parse.func) Hashtbl.t = Hashtbl.create 16 in
+  while not (Queue.is_empty funcs) do
+    let func : Parse.func = Queue.take funcs in
+    Hashtbl.add mapping (fst func.label) func
+  done;
+  Queue.iter
+    (fun label ->
+       match Hashtbl.find_opt mapping label with
+       | None -> ()
+       | Some func -> Queue.add func funcs)
+    ordering
+
 let check (funcs : Parse.func Queue.t) : unit =
   set_intrinsic "printf" TypeAny;
   set_intrinsic "=" (TypeFunc ([TypeInt; TypeInt], TypeRange (0, 1)));
@@ -418,6 +509,7 @@ let check (funcs : Parse.func Queue.t) : unit =
   set_intrinsic "/" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   set_intrinsic "%" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   Queue.iter prepare funcs;
+  reorder funcs;
   Queue.iter walk_func funcs;
   assert ((Stack.length context.generics) = 0);
   match Hashtbl.find_opt context.bindings "entry_" with
