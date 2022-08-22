@@ -390,6 +390,7 @@ and walk_func (func : Parse.func) : unit =
    | _ -> assert false)
 
 let set_intrinsic (label : string) (type' : type') : unit =
+  assert (not (Hashtbl.mem context.bindings label));
   Hashtbl.add context.bindings label (type', None)
 
 let collect (funcs : Parse.func Queue.t) : unit =
