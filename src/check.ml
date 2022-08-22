@@ -311,15 +311,13 @@ and walk_switch
     match expr with
     | (ExprCall ((ExprVar "%", _), [expr; (ExprInt n, _)]), position)
       when 0 < n ->
-      (
-        match walk_expr expr with
-        | Some type' ->
-          (
-            match_or_exit TypeInt type';
-            (TypeRange (0, n - 1), Some position)
-          )
-        | _ -> assert false
-      )
+      (match walk_expr expr with
+       | Some type' ->
+         (
+           match_or_exit TypeInt type';
+           (TypeRange (0, n - 1), Some position)
+         )
+       | _ -> assert false)
     | (ExprInt n, position) when 0 <= n -> (TypeRange (0, n), Some position)
     | _ ->
       (match walk_expr expr with
@@ -361,25 +359,23 @@ and walk_stmt : Parse.stmt_pos -> type_pos option =
        )
      | _ -> assert false)
   | (StmtLet (var, expr), position) ->
-    (
-      match walk_expr expr with
-      | Some (TypeAny, _) -> assert false
-      | Some type' ->
-        (match Hashtbl.find_opt context.bindings var with
-         | None ->
-           (
-             let scope : string Stack.t = Stack.pop context.scopes in
-             Stack.push var scope;
-             Stack.push scope context.scopes;
-             Hashtbl.add context.bindings var type';
-             None
-           )
-         | Some _ ->
-           Io.exit_at
-             position
-             (Printf.sprintf "`%s` shadows existing variable binding" var))
-      | None -> assert false
-    )
+    (match walk_expr expr with
+     | Some (TypeAny, _) -> assert false
+     | Some type' ->
+       (match Hashtbl.find_opt context.bindings var with
+        | None ->
+          (
+            let scope : string Stack.t = Stack.pop context.scopes in
+            Stack.push var scope;
+            Stack.push scope context.scopes;
+            Hashtbl.add context.bindings var type';
+            None
+          )
+        | Some _ ->
+          Io.exit_at
+            position
+            (Printf.sprintf "`%s` shadows existing variable binding" var))
+     | None -> assert false)
   | (StmtSetLocal _, _) -> assert false
   | (StmtSetHeap _, _) -> assert false
 
@@ -402,20 +398,18 @@ and walk_func (func : Parse.func) : unit =
    | _ -> assert false);
   let _ : type_pos option list = List.map walk_stmt func.body in
   destroy_scope ();
-  (
-    match Hashtbl.find context.bindings context.func_label with
-    | (TypeFunc (args, return), position) ->
-      let vars : string list = List.concat_map (find_vars []) args in
-      let return : type' =
-        match return with
-        | TypeVar var when List.mem var vars -> get_generic return
-        | _ -> return in
-      Hashtbl.replace
-        context.bindings
-        context.func_label
-        (TypeFunc (List.map get_generic args, return), position)
-    | _ -> assert false
-  );
+  (match Hashtbl.find context.bindings context.func_label with
+   | (TypeFunc (args, return), position) ->
+     let vars : string list = List.concat_map (find_vars []) args in
+     let return : type' =
+       match return with
+       | TypeVar var when List.mem var vars -> get_generic return
+       | _ -> return in
+     Hashtbl.replace
+       context.bindings
+       context.func_label
+       (TypeFunc (List.map get_generic args, return), position)
+   | _ -> assert false);
   print_bindings ()
 
 let set_intrinsic (label : string) (type' : type') : unit =
