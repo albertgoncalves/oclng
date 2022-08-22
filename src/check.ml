@@ -205,6 +205,43 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
      | None ->
        Io.exit_at position (Printf.sprintf "`%s` used before declaration" var)
      | type' -> type')
+
+  | (ExprCall ((ExprVar "alloc", _), [(ExprInt n, _)]), position) ->
+    Some (TypeHeap (List.init n (fun _ -> get_var ())), Some position)
+  | (ExprCall ((ExprVar "alloc", _), _), _) -> assert false
+  | (ExprCall ((ExprVar "child+", _), [expr; (ExprInt n, _)]), position) ->
+    (match walk_expr expr with
+     | Some (TypeHeap items, _) ->
+       (match List.nth_opt items n with
+        | Some type' ->
+          (match deref (type', Some position) with
+           | (TypeHeap _, _) -> None
+           | _ -> assert false)
+        | None ->
+          Io.exit_at
+            position
+            (Printf.sprintf
+               "index %d is out-of-bounds for allocation of length %d"
+               n
+               (List.length items)))
+     | _ -> assert false)
+  | (ExprCall ((ExprVar "deref", _), [expr; (ExprInt n, _)]), position) ->
+    (match walk_expr expr with
+     | Some type' ->
+       (match deref type' with
+        | (TypeHeap items, _) ->
+          (match List.nth_opt items n with
+           | None ->
+             Io.exit_at
+               position
+               (Printf.sprintf
+                  "index %d is out-of-bounds for allocation of length %d"
+                  n
+                  (List.length items))
+           | Some type' -> Some (type', Some position))
+        | (type', _) -> assert false)
+     | _ -> assert false)
+
   | (ExprCall (expr, arg_exprs), position) -> walk_call expr arg_exprs position
   | (ExprSwitch (expr, branches), position) ->
     walk_switch expr branches position
@@ -353,7 +390,29 @@ and walk_stmt : Parse.stmt_pos -> type_pos option =
             (Printf.sprintf "`%s` shadows existing variable binding" var))
      | None -> assert false)
   | (StmtSetLocal _, _) -> assert false
-  | (StmtSetHeap _, _) -> assert false
+  | (StmtSetHeap (var, n, value), position) ->
+    (match walk_expr var with
+     | Some type' ->
+       (match deref type' with
+        | (TypeHeap items, _) ->
+          (match List.nth_opt items n with
+           | Some item ->
+             (match walk_expr value with
+              | Some value_type ->
+                (
+                  match_or_exit item value_type;
+                  None
+                )
+              | None -> assert false)
+           | None ->
+             Io.exit_at
+               position
+               (Printf.sprintf
+                  "index %d is out-of-bounds for allocation of length %d"
+                  n
+                  (List.length items)))
+        | _ -> assert false)
+     | None -> assert false)
 
 and walk_func (func : Parse.func) : unit =
   create_scope ();
@@ -484,7 +543,11 @@ let reorder (funcs : Parse.func Queue.t) : unit =
     | Parse.StmtReturn expr
     | Parse.StmtLet (_, expr)
     | Parse.StmtSetLocal (_, expr) -> walk_expr parent expr
-    | Parse.StmtSetHeap _ -> assert false in
+    | Parse.StmtSetHeap (var, _, value) ->
+      (
+        walk_expr parent var;
+        walk_expr parent value
+      ) in
   Queue.iter
     (fun (func : Parse.func) ->
        List.iter (walk_stmt (fst func.label)) func.body)
@@ -517,6 +580,8 @@ let reorder (funcs : Parse.func Queue.t) : unit =
 
 let check (funcs : Parse.func Queue.t) : unit =
   set_intrinsic "printf" TypeAny;
+  set_intrinsic "print_stack" (TypeFunc ([], TypeAny));
+  set_intrinsic "free" (TypeFunc ([], TypeAny));
   set_intrinsic "=" (TypeFunc ([TypeInt; TypeInt], TypeRange (0, 1)));
   set_intrinsic "+" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   set_intrinsic "-" (TypeFunc ([TypeInt; TypeInt], TypeInt));
