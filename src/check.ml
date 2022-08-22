@@ -239,7 +239,12 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
                   n
                   (List.length items))
            | Some type' -> Some (type', Some position))
-        | (type', _) -> assert false)
+        | _ ->
+          Io.exit_at
+            position
+            (Printf.sprintf
+               "unable to de-reference unknown allocation `%s`"
+               (Parse.show_expr (fst expr))))
      | _ -> assert false)
 
   | (ExprCall (expr, arg_exprs), position) -> walk_call expr arg_exprs position
@@ -411,7 +416,12 @@ and walk_stmt : Parse.stmt_pos -> type_pos option =
                   "index %d is out-of-bounds for allocation of length %d"
                   n
                   (List.length items)))
-        | _ -> assert false)
+        | _ ->
+          Io.exit_at
+            position
+            (Printf.sprintf
+               "unable to write to unknown allocation `%s`"
+               (Parse.show_expr (fst var))))
      | None -> assert false)
 
 and walk_func (func : Parse.func) : unit =
