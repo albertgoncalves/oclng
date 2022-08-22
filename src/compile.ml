@@ -56,7 +56,6 @@ type context =
     strings : (string, string) Hashtbl.t;
     tables : (string * (string list)) Queue.t;
     externs : (string, unit) Hashtbl.t;
-    funcs : Parse.func Queue.t;
   }
 
 let context : context =
@@ -69,7 +68,6 @@ let context : context =
     strings = Hashtbl.create 64;
     tables = Queue.create ();
     externs = Hashtbl.create 8;
-    funcs = Queue.create ();
   }
 
 let arg_regs : reg list =
@@ -201,7 +199,6 @@ let rec compile_expr : Parse.expr_pos -> unit =
     )
   | (ExprFunc func, _) ->
     (
-      Queue.add func context.funcs;
       append_inst (InstPush (OpLabel (fst func.label)));
       context.stack <- context.stack + 1
     )
@@ -662,10 +659,7 @@ let rec opt_jump (prev : inst list) : inst list -> inst list =
   | inst :: insts -> opt_jump (inst :: prev) insts
 
 let compile (funcs : Parse.func Queue.t) : Buffer.t =
-  Queue.transfer funcs context.funcs;
-  while not (Queue.is_empty context.funcs) do
-    compile_func (Queue.take context.funcs)
-  done;
+  Queue.iter compile_func funcs;
   let buffer : Buffer.t = Buffer.create 1024 in
   Buffer.add_string buffer
     "format ELF64\n\

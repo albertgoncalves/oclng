@@ -184,22 +184,6 @@ let destroy_scope () : unit =
     Hashtbl.remove context.bindings (Stack.pop scope)
   done
 
-let prepare (func : Parse.func) : unit =
-  let (label, position) : string * Io.position = func.label in
-  (match Hashtbl.find_opt context.bindings label with
-   | None -> ()
-   | Some _ ->
-     Io.exit_at
-       position
-       (Printf.sprintf "function `%s` is already defined" label));
-  let args : (string * type') list =
-    List.map (fun (arg, position) -> (arg, get_var ())) func.args in
-  Hashtbl.add context.funcs label (List.map fst args);
-  Hashtbl.add
-    context.bindings
-    label
-    (TypeFunc (List.map snd args, get_var ()), Some position)
-
 let rec find_vars (vars : string list) : type' -> string list =
   function
   | TypeVar var -> var :: vars
@@ -224,15 +208,7 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
   | (ExprCall (expr, arg_exprs), position) -> walk_call expr arg_exprs position
   | (ExprSwitch (expr, branches), position) ->
     walk_switch expr branches position
-  | (ExprFunc func, _) ->
-    (
-      let prev : string = context.func_label in
-      prepare func;
-      walk_func func;
-      let current : string = context.func_label in
-      context.func_label <- prev;
-      Some (Hashtbl.find context.bindings current)
-    )
+  | (ExprFunc func, _) -> Some (Hashtbl.find context.bindings (fst func.label))
 
 and walk_call
     (expr : Parse.expr_pos)
@@ -391,6 +367,7 @@ and walk_func (func : Parse.func) : unit =
      List.combine arg_labels arg_types
      |> List.iter
        (fun (arg, type') ->
+          assert (not (Hashtbl.mem context.bindings arg));
           Hashtbl.add context.bindings arg (type', position);
           let scope : string Stack.t = Stack.pop context.scopes in
           Stack.push arg scope;
@@ -415,6 +392,62 @@ and walk_func (func : Parse.func) : unit =
 let set_intrinsic (label : string) (type' : type') : unit =
   Hashtbl.add context.bindings label (type', None)
 
+let collect (funcs : Parse.func Queue.t) : unit =
+  let locals : Parse.func Queue.t = Queue.create () in
+  let rec walk_expr (expr : Parse.expr_pos) : unit =
+    match fst expr with
+    | Parse.ExprInt _
+    | Parse.ExprIndex _
+    | Parse.ExprStr _
+    | Parse.ExprVar _ -> ()
+    | Parse.ExprFunc func ->
+      (
+        Queue.add func locals;
+        List.iter walk_stmt func.body
+      )
+    | Parse.ExprCall (expr, args) ->
+      (
+        walk_expr expr;
+        List.iter walk_expr args
+      )
+    | Parse.ExprSwitch (expr, branches) ->
+      (
+        walk_expr expr;
+        List.iter (List.iter walk_stmt) branches
+      )
+  and walk_stmt (stmt : Parse.stmt_pos) : unit =
+    match fst stmt with
+    | Parse.StmtDrop expr
+    | Parse.StmtHold expr
+    | Parse.StmtReturn expr
+    | Parse.StmtLet (_, expr)
+    | Parse.StmtSetLocal (_, expr) -> walk_expr expr
+    | Parse.StmtSetHeap (var, _, value) ->
+      (
+        walk_expr var;
+        walk_expr value
+      ) in
+  Queue.iter (fun (func : Parse.func) -> List.iter walk_stmt func.body) funcs;
+  Queue.transfer locals funcs
+
+let prepare (func : Parse.func) : unit =
+  let (label, position) : string * Io.position = func.label in
+  (match Hashtbl.find_opt context.bindings label with
+   | None -> ()
+   | Some _ ->
+     Io.exit_at
+       position
+       (Printf.sprintf "function `%s` is already defined" label));
+  let args : (string * type') list =
+    List.map (fun (arg, position) -> (arg, get_var ())) func.args in
+  assert (not (Hashtbl.mem context.funcs label));
+  Hashtbl.add context.funcs label (List.map fst args);
+  assert (not (Hashtbl.mem context.bindings label));
+  Hashtbl.add
+    context.bindings
+    label
+    (TypeFunc (List.map snd args, get_var ()), Some position)
+
 let reorder (funcs : Parse.func Queue.t) : unit =
   let graph : (string, (string, unit) Hashtbl.t) Hashtbl.t =
     Hashtbl.create 16 in
@@ -422,7 +455,6 @@ let reorder (funcs : Parse.func Queue.t) : unit =
     (fun (func : Parse.func) ->
        Hashtbl.add graph (fst func.label) (Hashtbl.create 8))
     funcs;
-  let locals : Parse.func Stack.t = Stack.create () in
   let rec walk_expr (parent : string) (expr : Parse.expr_pos) : unit =
     match fst expr with
     | Parse.ExprInt _
@@ -433,10 +465,7 @@ let reorder (funcs : Parse.func Queue.t) : unit =
         Hashtbl.replace (Hashtbl.find graph parent) var ()
       )
     | Parse.ExprFunc func ->
-      (
-        Stack.push func locals;
-        Hashtbl.replace (Hashtbl.find graph parent) (fst func.label) ()
-      )
+      Hashtbl.replace (Hashtbl.find graph parent) (fst func.label) ()
     | Parse.ExprCall (expr, args) ->
       (
         walk_expr parent expr;
@@ -459,13 +488,6 @@ let reorder (funcs : Parse.func Queue.t) : unit =
     (fun (func : Parse.func) ->
        List.iter (walk_stmt (fst func.label)) func.body)
     funcs;
-  while not (Stack.is_empty locals) do
-    let func : Parse.func = (Stack.pop locals) in
-    let label : string = fst func.label in
-    assert (not (Hashtbl.mem graph label));
-    Hashtbl.add graph label (Hashtbl.create 8);
-    List.iter (f1 label) func.body
-  done;
   print_graph graph;
   let ordering : string Queue.t =  Queue.create () in
   let parents : (string * (string, unit) Hashtbl.t) Queue.t =
@@ -489,10 +511,7 @@ let reorder (funcs : Parse.func Queue.t) : unit =
     Hashtbl.add mapping (fst func.label) func
   done;
   Queue.iter
-    (fun label ->
-       match Hashtbl.find_opt mapping label with
-       | None -> ()
-       | Some func -> Queue.add func funcs)
+    (fun label -> Queue.add (Hashtbl.find mapping label) funcs)
     ordering
 
 let check (funcs : Parse.func Queue.t) : unit =
@@ -503,6 +522,7 @@ let check (funcs : Parse.func Queue.t) : unit =
   set_intrinsic "*" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   set_intrinsic "/" (TypeFunc ([TypeInt; TypeInt], TypeInt));
   set_intrinsic "%" (TypeFunc ([TypeInt; TypeInt], TypeInt));
+  collect funcs;
   Queue.iter prepare funcs;
   reorder funcs;
   Queue.iter walk_func funcs;
