@@ -1,0 +1,8 @@
+entry {
+    let x "?";
+    let f \x {
+        x
+    };
+    (printf "%ld\n%s\n" (+ (f 1) 1) x);
+    0
+}

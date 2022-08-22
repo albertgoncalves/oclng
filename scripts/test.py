@@ -65,6 +65,9 @@ class Tests(TestCase):
     def test_set_local(self):
         self.into_test("set_local", -4560)
 
+    def test_shadow(self):
+        self.into_test("shadow", "2\n?")
+
 
 if __name__ == "__main__":
     main()
