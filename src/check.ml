@@ -72,7 +72,7 @@ let print_bindings () : unit =
     Printf.fprintf stderr "%s {\n" context.func_label;
   Hashtbl.iter
     (fun label type' ->
-       Printf.fprintf stderr "    %-8s : %s\n" label (show_type (fst type')))
+       Printf.fprintf stderr "    %-12s : %s\n" label (show_type (fst type')))
     context.bindings;
   Printf.fprintf stderr "}\n\n"
 
@@ -80,7 +80,7 @@ let print_graph
     (graph : (string, (string, unit) Hashtbl.t) Hashtbl.t) : unit =
   Hashtbl.iter
     (fun parent children ->
-       Printf.fprintf stderr "%-8s[ " parent;
+       Printf.fprintf stderr "%-12s[ " parent;
        Hashtbl.iter
          (fun child _ -> Printf.fprintf stderr "%s " child)
          children;
@@ -397,6 +397,7 @@ and walk_func (func : Parse.func) : unit =
           Stack.push scope context.scopes)
    | _ -> assert false);
   let _ : type_pos option list = List.map walk_stmt func.body in
+  print_bindings ();
   destroy_scope ();
   (match Hashtbl.find context.bindings context.func_label with
    | (TypeFunc (args, return), position) ->
@@ -409,8 +410,7 @@ and walk_func (func : Parse.func) : unit =
        context.bindings
        context.func_label
        (TypeFunc (List.map get_generic args, return), position)
-   | _ -> assert false);
-  print_bindings ()
+   | _ -> assert false)
 
 let set_intrinsic (label : string) (type' : type') : unit =
   Hashtbl.add context.bindings label (type', None)
