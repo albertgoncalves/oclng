@@ -423,7 +423,7 @@ let reorder (funcs : Parse.func Queue.t) : unit =
        Hashtbl.add graph (fst func.label) (Hashtbl.create 8))
     funcs;
   let locals : Parse.func Stack.t = Stack.create () in
-  let rec f0 (parent : string) (expr : Parse.expr_pos) : unit =
+  let rec walk_expr (parent : string) (expr : Parse.expr_pos) : unit =
     match fst expr with
     | Parse.ExprInt _
     | Parse.ExprIndex _
@@ -439,24 +439,25 @@ let reorder (funcs : Parse.func Queue.t) : unit =
       )
     | Parse.ExprCall (expr, args) ->
       (
-        f0 parent expr;
-        List.iter (f0 parent) args
+        walk_expr parent expr;
+        List.iter (walk_expr parent) args
       )
     | Parse.ExprSwitch (expr, branches) ->
       (
-        f0 parent expr;
-        List.iter (List.iter (f1 parent)) branches
+        walk_expr parent expr;
+        List.iter (List.iter (walk_stmt parent)) branches
       )
-  and f1 (parent : string) (stmt : Parse.stmt_pos) : unit =
+  and walk_stmt (parent : string) (stmt : Parse.stmt_pos) : unit =
     match fst stmt with
     | Parse.StmtDrop expr
     | Parse.StmtHold expr
     | Parse.StmtReturn expr
     | Parse.StmtLet (_, expr)
-    | Parse.StmtSetLocal (_, expr) -> f0 parent expr
+    | Parse.StmtSetLocal (_, expr) -> walk_expr parent expr
     | Parse.StmtSetHeap _ -> assert false in
   Queue.iter
-    (fun (func : Parse.func) -> List.iter (f1 (fst func.label)) func.body)
+    (fun (func : Parse.func) ->
+       List.iter (walk_stmt (fst func.label)) func.body)
     funcs;
   while not (Stack.is_empty locals) do
     let func : Parse.func = (Stack.pop locals) in
