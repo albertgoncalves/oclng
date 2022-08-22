@@ -1,7 +1,7 @@
 entry {
     let counter \ {
         let scope (alloc 2);
-        seta scope 0 \scope {
+        seta scope 0 \scope @ _ {
             seta (deref scope 1) 0 (+ (deref (deref scope 1) 0) 1);
             (deref scope 1)
         };

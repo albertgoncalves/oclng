@@ -133,6 +133,9 @@ type token =
   | TokenSemiC
   | TokenSlash
 
+  | TokenAt
+  | TokenUnderS
+
   | TokenReturn
   | TokenLet
   | TokenSet
@@ -155,6 +158,9 @@ let show_token : token -> string =
   | TokenRBracket -> "]"
   | TokenSemiC -> ";"
   | TokenSlash -> "\\"
+
+  | TokenAt -> "@"
+  | TokenUnderS -> "_"
 
   | TokenReturn -> "return"
   | TokenLet -> "let"
@@ -226,6 +232,8 @@ let into_token : (string * Io.position) -> token_pos =
   | ("]", position) -> (TokenRBracket, position)
   | (";", position) -> (TokenSemiC, position)
   | ("\\", position) -> (TokenSlash, position)
+  | ("@", position) -> (TokenAt, position)
+  | ("_", position) -> (TokenUnderS, position)
 
   | ("return", position) -> (TokenReturn, position)
   | ("let", position) -> (TokenLet, position)
@@ -320,7 +328,7 @@ let tokenize () : token_pos Queue.t =
           let r : int = r + 1 in
           loop_token r r
         )
-      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' ->
+      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' | '@' ->
         (
           if l <> r then (
             Queue.add
@@ -379,9 +387,18 @@ let rec parse_args
     (prev : string_type_pos list)
     (tokens : token_pos Queue.t) : string_type_pos list =
   match peek tokens with
-  | (TokenIdent x, position) ->
+  | (TokenIdent arg, position) ->
     let _ : token_pos = pop tokens in
-    parse_args ((x, None, position) :: prev) tokens
+    (match peek tokens with
+     | (TokenAt, _) ->
+       (
+         let _ : token_pos = pop tokens in
+         match pop tokens with
+         | (TokenUnderS, _) ->
+           parse_args ((arg, None, position) :: prev) tokens
+         | _ -> assert false
+       )
+     | _ -> parse_args ((arg, None, position) :: prev) tokens)
   | _ -> List.rev prev
 
 let exit_unexpected_token ((token, position) : token_pos) : 'a =
