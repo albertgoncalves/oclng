@@ -15,10 +15,20 @@ and expr =
   | ExprCall of (expr_pos * expr_pos list)
   | ExprSwitch of (expr_pos * stmt_pos list list)
 
+and type' =
+  | TypeAny
+  | TypeVar of string
+  | TypeRange of (int * int)
+  | TypeInt
+  | TypeStr
+  | TypeFunc of ((type' list) * type')
+  | TypeHeap of type' list
+  | TypeGeneric of string
+
 and func =
   {
     label : string_pos;
-    args : string_pos list;
+    args : string_type_pos list;
     body : stmt_pos list;
   }
 
@@ -27,6 +37,8 @@ and stmt_pos = (stmt * Io.position)
 and expr_pos = (expr * Io.position)
 
 and string_pos = (string * Io.position)
+
+and string_type_pos = (string * (type' option) * Io.position)
 
 let encode (chars : char list) : string =
   let rec f (prev : char list) : char list -> char list =
@@ -108,7 +120,7 @@ let show_func (func : func) : string =
     Printf.sprintf
       "%s %s {\n    %s\n}\n"
       label
-      (String.concat " " (List.map fst func.args))
+      (String.concat " " (List.map (fun (x, _, _) -> x) func.args))
       body
 
 type token =
@@ -364,12 +376,12 @@ let rec return_last (prev : stmt_pos list) : stmt_pos list -> stmt_pos list =
   | stmt :: stmts -> return_last (stmt :: prev) stmts
 
 let rec parse_args
-    (prev : string_pos list)
-    (tokens : token_pos Queue.t) : string_pos list =
+    (prev : string_type_pos list)
+    (tokens : token_pos Queue.t) : string_type_pos list =
   match peek tokens with
   | (TokenIdent x, position) ->
     let _ : token_pos = pop tokens in
-    parse_args ((x, position) :: prev) tokens
+    parse_args ((x, None, position) :: prev) tokens
   | _ -> List.rev prev
 
 let exit_unexpected_token ((token, position) : token_pos) : 'a =
@@ -530,7 +542,7 @@ and parse_func (tokens : token_pos Queue.t) : expr_pos =
     match pop tokens with
     | (TokenSlash, position) -> position
     | token -> exit_unexpected_token token in
-  let args : string_pos list = parse_args [] tokens in
+  let args : string_type_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     return_last [] (parse_block tokens (parse_stmts [])) in
   let label : string = Printf.sprintf "_fn_%d_" (get_k ()) in
@@ -686,7 +698,7 @@ let parse_top_func (tokens : token_pos Queue.t) : func =
     match pop tokens with
     | (TokenIdent x, position) -> (x, position)
     | token -> exit_unexpected_token token in
-  let args : string_pos list = parse_args [] tokens in
+  let args : string_type_pos list = parse_args [] tokens in
   let body : stmt_pos list =
     parse_stmts []
     |> parse_block tokens

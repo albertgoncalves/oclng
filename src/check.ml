@@ -1,16 +1,6 @@
-type type' =
-  | TypeAny
-  | TypeVar of string
-  | TypeRange of (int * int)
-  | TypeInt
-  | TypeStr
-  | TypeFunc of ((type' list) * type')
-  | TypeHeap of type' list
-  | TypeGeneric of string
+type type_pos = (Parse.type' * (Io.position option))
 
-and type_pos = (type' * (Io.position option))
-
-let rec show_type : type' -> string =
+let rec show_type : Parse.type' -> string =
   function
   | TypeAny -> "any"
   | TypeVar var -> var
@@ -22,7 +12,7 @@ let rec show_type : type' -> string =
   | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
   | TypeGeneric var -> Printf.sprintf "'%s" var
 
-and show_types (types : type' list) : string =
+and show_types (types : Parse.type' list) : string =
   String.concat " " (List.map show_type types)
 
 type context =
@@ -52,7 +42,7 @@ let get_k () : int =
   context.k <- context.k + 1;
   k
 
-let get_var () : type' =
+let get_var () : Parse.type' =
   let label : string = Printf.sprintf "_%d_" (get_k ()) in
   Queue.add label context.vars;
   TypeVar label
@@ -88,7 +78,7 @@ let print_graph
     graph;
   Printf.fprintf stderr "\n"
 
-let rec match_or_exit (expected : type') (given : type_pos) : unit =
+let rec match_or_exit (expected : Parse.type') (given : type_pos) : unit =
   match (expected, deref given) with
   | (_, (_, None)) -> assert false
   | (TypeGeneric var, given) ->
@@ -135,8 +125,8 @@ let rec match_or_exit (expected : type') (given : type_pos) : unit =
 
 let rec swap
     (target : string)
-    (replacement : type')
-    (existing : type') : type' =
+    (replacement : Parse.type')
+    (existing : Parse.type') : Parse.type' =
   match existing with
   | TypeVar var when var = target -> replacement
   | TypeFunc (args, return) ->
@@ -145,7 +135,7 @@ let rec swap
   | TypeHeap items -> TypeHeap (List.map (swap target replacement) items)
   | _ -> existing
 
-let rec get_generic : type' -> type' =
+let rec get_generic : Parse.type' -> Parse.type' =
   function
   | TypeVar var -> TypeGeneric var
   | TypeFunc (args, return) ->
@@ -184,7 +174,7 @@ let destroy_scope () : unit =
     Hashtbl.remove context.bindings (Stack.pop scope)
   done
 
-let rec find_vars (vars : string list) : type' -> string list =
+let rec find_vars (vars : string list) : Parse.type' -> string list =
   function
   | TypeVar var -> var :: vars
   | TypeFunc (args, return) ->
@@ -303,7 +293,7 @@ and walk_call
              arg_types_len
              arg_exprs_len)
       );
-      let return : type' = get_var () in
+      let return : Parse.type' = get_var () in
       match Hashtbl.find_opt context.bindings var with
       | Some _ -> assert false
       | None ->
@@ -448,7 +438,7 @@ and walk_func (func : Parse.func) : unit =
   (match Hashtbl.find context.bindings context.func_label with
    | (TypeFunc (args, return), position) ->
      let vars : string list = List.concat_map (find_vars []) args in
-     let return : type' =
+     let return : Parse.type' =
        match return with
        | TypeVar var when List.mem var vars -> get_generic return
        | _ -> return in
@@ -458,7 +448,7 @@ and walk_func (func : Parse.func) : unit =
        (TypeFunc (List.map get_generic args, return), position)
    | _ -> assert false)
 
-let set_intrinsic (label : string) (type' : type') : unit =
+let set_intrinsic (label : string) (type' : Parse.type') : unit =
   assert (not (Hashtbl.mem context.bindings label));
   Hashtbl.add context.bindings label (type', None)
 
@@ -508,8 +498,8 @@ let prepare (func : Parse.func) : unit =
      Io.exit_at
        position
        (Printf.sprintf "function `%s` is already defined" label));
-  let args : (string * type') list =
-    List.map (fun (arg, position) -> (arg, get_var ())) func.args in
+  let args : (string * Parse.type') list =
+    List.map (fun (arg, _, position) -> (arg, get_var ())) func.args in
   assert (not (Hashtbl.mem context.funcs label));
   Hashtbl.add context.funcs label (List.map fst args);
   assert (not (Hashtbl.mem context.bindings label));

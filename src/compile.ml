@@ -161,10 +161,11 @@ let append_var (var : string) : unit =
   assert (not (Hashtbl.mem context.vars var));
   Hashtbl.add context.vars var context.stack
 
-let rec compile_func_args (regs : reg list) : Parse.string_pos list -> unit =
+let rec compile_func_args
+    (regs : reg list) : Parse.string_type_pos list -> unit =
   function
   | [] -> ()
-  | (arg, _) :: args ->
+  | (arg, _, _) :: args ->
     (match regs with
      | [] -> assert false
      | reg :: regs ->
