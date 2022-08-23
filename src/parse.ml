@@ -40,6 +40,8 @@ and string_pos = (string * Io.position)
 
 and string_type_pos = (string * (type' option) * Io.position)
 
+type type_pos = (type' * (Io.position option))
+
 let encode (chars : char list) : string =
   let rec f (prev : char list) : char list -> char list =
     function
@@ -122,6 +124,22 @@ let show_func (func : func) : string =
       label
       (String.concat " " (List.map (fun (ident, _, _) -> ident) func.args))
       body
+
+let rec show_type : type' -> string =
+  function
+  | TypeAny -> "any"
+  | TypeVar var -> var
+  | TypeRange (l, r) -> Printf.sprintf "[%d, %d]" l r
+  | TypeInt -> "int"
+  | TypeStr -> "str"
+  | TypeFunc (args, return) ->
+    Printf.sprintf "\\%s { %s }" (show_types args) (show_type return)
+  | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
+  | TypeGeneric var -> Printf.sprintf "'%s" var
+  | TypeStruct struct' -> struct'
+
+and show_types (types : type' list) : string =
+  String.concat " " (List.map show_type types)
 
 type token =
   | TokenLParen

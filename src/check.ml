@@ -1,24 +1,7 @@
-type type_pos = (Parse.type' * (Io.position option))
-
-let rec show_type : Parse.type' -> string =
-  function
-  | TypeAny -> "any"
-  | TypeVar var -> var
-  | TypeRange (l, r) -> Printf.sprintf "[%d, %d]" l r
-  | TypeInt -> "int"
-  | TypeStr -> "str"
-  | TypeFunc (args, return) ->
-    Printf.sprintf "\\%s { %s }" (show_types args) (show_type return)
-  | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
-  | TypeGeneric var -> Printf.sprintf "'%s" var
-
-and show_types (types : Parse.type' list) : string =
-  String.concat " " (List.map show_type types)
-
 type context =
   {
     mutable k : int;
-    bindings : (string, type_pos) Hashtbl.t;
+    bindings : (string, Parse.type_pos) Hashtbl.t;
     funcs : (string, string list) Hashtbl.t;
     vars : string Queue.t;
     scopes : string Stack.t Stack.t;
@@ -47,7 +30,7 @@ let get_var () : Parse.type' =
   Queue.add label context.vars;
   TypeVar label
 
-let rec deref : type_pos -> type_pos =
+let rec deref : Parse.type_pos -> Parse.type_pos =
   function
   | (TypeVar var, position) as type' ->
     (match Hashtbl.find_opt context.bindings var with
@@ -62,7 +45,11 @@ let print_bindings () : unit =
     Printf.fprintf stderr "%s {\n" context.func_label;
   Hashtbl.iter
     (fun label type' ->
-       Printf.fprintf stderr "    %-12s : %s\n" label (show_type (fst type')))
+       Printf.fprintf
+         stderr
+         "    %-12s : %s\n"
+         label
+         (Parse.show_type (fst type')))
     context.bindings;
   Printf.fprintf stderr "}\n\n"
 
@@ -78,7 +65,9 @@ let print_graph
     graph;
   Printf.fprintf stderr "\n"
 
-let rec match_or_exit (expected : Parse.type') (given : type_pos) : unit =
+let rec match_or_exit
+    (expected : Parse.type')
+    (given : Parse.type_pos) : unit =
   match (expected, deref given) with
   | (_, (_, None)) -> assert false
   | (TypeGeneric var, given) ->
@@ -120,8 +109,8 @@ let rec match_or_exit (expected : Parse.type') (given : type_pos) : unit =
       position
       (Printf.sprintf
          "expected `%s`, given `%s`"
-         (show_type expected)
-         (show_type given))
+         (Parse.show_type expected)
+         (Parse.show_type given))
 
 let rec swap
     (target : string)
@@ -185,7 +174,7 @@ let rec find_vars (vars : string list) : Parse.type' -> string list =
     List.rev_append (List.concat_map (find_vars []) items) vars
   | _ -> vars
 
-let rec walk_expr : Parse.expr_pos -> type_pos option =
+let rec walk_expr : Parse.expr_pos -> Parse.type_pos option =
   function
   | (ExprInt _, position) -> Some (TypeInt, Some position)
   | (ExprIndex (_, l, r), position) -> Some (TypeRange (l, r), Some position)
@@ -245,11 +234,11 @@ let rec walk_expr : Parse.expr_pos -> type_pos option =
 and walk_call
     (expr : Parse.expr_pos)
     (arg_exprs : Parse.expr_pos list)
-    (position : Io.position) : type_pos option =
+    (position : Io.position) : Parse.type_pos option =
   match walk_expr expr with
   | Some (TypeAny, _) as type' ->
     (
-      let _ : type_pos option list = List.map walk_expr arg_exprs in
+      let _ : Parse.type_pos option list = List.map walk_expr arg_exprs in
       type'
     )
   | Some (TypeFunc (arg_types, return), _) ->
@@ -266,12 +255,13 @@ and walk_call
              arg_exprs_len)
       );
       let n : int = Stack.length context.generics in
-      let expr_types : type_pos list = List.filter_map walk_expr arg_exprs in
+      let expr_types : Parse.type_pos list =
+        List.filter_map walk_expr arg_exprs in
       assert (arg_exprs_len = (List.length expr_types));
       List.iter
         (fun (a, b) -> match_or_exit a b)
         (List.combine arg_types expr_types);
-      let return : type_pos =
+      let return : Parse.type_pos =
         match return with
         | TypeGeneric var -> Hashtbl.find context.bindings var
         | _ -> (return, Some position) in
@@ -282,7 +272,8 @@ and walk_call
     )
   | Some (TypeVar var, _) ->
     (
-      let arg_types : type_pos list = List.filter_map walk_expr arg_exprs in
+      let arg_types : Parse.type_pos list =
+        List.filter_map walk_expr arg_exprs in
       let arg_exprs_len : int = List.length arg_exprs in
       let arg_types_len : int = List.length arg_types in
       if arg_types_len <> arg_exprs_len then (
@@ -308,14 +299,14 @@ and walk_call
   | Some (type', _) ->
     Io.exit_at
       position
-      (Printf.sprintf "function has type `%s`" (show_type type'))
+      (Printf.sprintf "function has type `%s`" (Parse.show_type type'))
   | _ -> assert false
 
 and walk_switch
     (expr : Parse.expr_pos)
     (branches : Parse.stmt_pos list list)
-    (position : Io.position) : type_pos option =
-  let type' : type_pos =
+    (position : Io.position) : Parse.type_pos option =
+  let type' : Parse.type_pos =
     match expr with
     | (ExprCall ((ExprVar "%", _), [expr; (ExprInt n, _)]), position)
       when 0 < n ->
@@ -332,11 +323,11 @@ and walk_switch
        | Some type' -> type'
        | None -> assert false) in
   match_or_exit (TypeRange (0, List.length branches - 1)) type';
-  let branches : type_pos list =
+  let branches : Parse.type_pos list =
     List.concat_map
       (fun branch ->
          create_scope ();
-         let type' : type_pos list = List.filter_map walk_stmt branch in
+         let type' : Parse.type_pos list = List.filter_map walk_stmt branch in
          destroy_scope ();
          type')
       branches in
@@ -348,11 +339,11 @@ and walk_switch
       assert false
   | [] -> None
 
-and walk_stmt : Parse.stmt_pos -> type_pos option =
+and walk_stmt : Parse.stmt_pos -> Parse.type_pos option =
   function
   | (StmtDrop expr, _) ->
     (
-      let _ : type_pos option = walk_expr expr in
+      let _ : Parse.type_pos option = walk_expr expr in
       None
     )
   | (StmtHold expr, _) -> walk_expr expr
@@ -432,7 +423,7 @@ and walk_func (func : Parse.func) : unit =
           Stack.push arg scope;
           Stack.push scope context.scopes)
    | _ -> assert false);
-  let _ : type_pos option list = List.map walk_stmt func.body in
+  let _ : Parse.type_pos option list = List.map walk_stmt func.body in
   print_bindings ();
   destroy_scope ();
   (match Hashtbl.find context.bindings context.func_label with
