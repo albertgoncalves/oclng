@@ -415,7 +415,9 @@ and compile_intrinsic (label : string) (args : Parse.expr_pos list) : bool =
              InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
              InstMov (OpReg RegSil, OpImm n);
              InstCall (OpLabel "set_child");
+             InstPush (OpImm 0);
            ];
+         context.stack <- context.stack + 1;
          Hashtbl.replace context.externs "set_child" ();
          true
        )
@@ -431,7 +433,9 @@ and compile_intrinsic (label : string) (args : Parse.expr_pos list) : bool =
              InstMov (OpReg RegRdi, OpDerefRegOffset (RegRsp, 0));
              InstMov (OpReg RegSil, OpImm n);
              InstCall (OpLabel "unset_child");
+             InstPush (OpImm 0);
            ];
+         context.stack <- context.stack + 1;
          Hashtbl.replace context.externs "unset_child" ();
          true
        )
