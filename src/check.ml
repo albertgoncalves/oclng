@@ -115,13 +115,13 @@ let rec match_or_exit (expected : Parse.type') (given : type_pos) : unit =
     (match Hashtbl.find_opt context.bindings var with
      | Some existing -> match_or_exit expected existing
      | None -> Hashtbl.add context.bindings var (expected, position))
-  | (_, (_, Some position)) ->
+  | (_, (given, Some position)) ->
     Io.exit_at
       position
       (Printf.sprintf
          "expected `%s`, given `%s`"
          (show_type expected)
-         (show_type (fst given)))
+         (show_type given))
 
 let rec swap
     (target : string)
