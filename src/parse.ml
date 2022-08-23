@@ -66,8 +66,8 @@ let rec show_expr : expr -> string =
   | ExprInt x -> string_of_int x
   | ExprIndex (x, l, r) -> Printf.sprintf "%d [%d, %d]" x l r
   | ExprStr "" -> "\"\""
-  | ExprStr x -> show_string x
-  | ExprVar x -> x
+  | ExprStr str -> show_string str
+  | ExprVar var -> var
   | ExprFunc func -> Printf.sprintf "%s { ... }" (fst func.label)
   | ExprCall (expr, []) -> Printf.sprintf "(%s)" (show_expr_pos expr)
   | ExprCall (expr, args) ->
@@ -120,7 +120,7 @@ let show_func (func : func) : string =
     Printf.sprintf
       "%s %s {\n    %s\n}\n"
       label
-      (String.concat " " (List.map (fun (x, _, _) -> x) func.args))
+      (String.concat " " (List.map (fun (ident, _, _) -> ident) func.args))
       body
 
 type token =
@@ -169,8 +169,8 @@ let show_token : token -> string =
   | TokenSwitch -> "switch"
 
   | TokenInt x -> string_of_int x
-  | TokenIdent x -> x
-  | TokenStr x -> Printf.sprintf "\"%s\"" x
+  | TokenIdent ident -> ident
+  | TokenStr str -> Printf.sprintf "\"%s\"" str
 
 type context =
   {
@@ -244,22 +244,22 @@ let into_token : (string * Io.position) -> token_pos =
   | ("entry", position) -> (TokenIdent "entry_", position)
   | ("loop", position) -> (TokenIdent "loop_", position)
 
-  | (chars, position) ->
+  | (ident, position) ->
     (
-      assert ((String.length chars) <> 0);
-      if String.for_all is_digit chars then
-        (TokenInt (int_of_string chars), position)
+      assert ((String.length ident) <> 0);
+      if String.for_all is_digit ident then
+        (TokenInt (int_of_string ident), position)
       else
-        let n : int = String.length chars in
-        if (chars.[0] = '"') && (chars.[n - 1] = '"') then (
-          (TokenStr (String.sub chars 1 (n - 2)), position)
+        let n : int = String.length ident in
+        if (ident.[0] = '"') && (ident.[n - 1] = '"') then (
+          (TokenStr (String.sub ident 1 (n - 2)), position)
         ) else (
-          assert (not (String.exists is_space chars));
-          if not (chars.[0] <> '_' || chars.[n - 1] <> '_' || chars = "_")
+          assert (not (String.exists is_space ident));
+          if not (ident.[0] <> '_' || ident.[n - 1] <> '_' || ident = "_")
           then (
-            Io.exit_at position (Printf.sprintf "invalid string \"%s\"" chars)
+            Io.exit_at position (Printf.sprintf "invalid string \"%s\"" ident)
           );
-          (TokenIdent chars, position)
+          (TokenIdent ident, position)
         )
     )
 
@@ -490,12 +490,12 @@ let rec parse_expr
   | (TokenInt x, position) ->
     let _ : token_pos = pop tokens in
     Ok (ExprInt x, position)
-  | (TokenIdent x, position) ->
+  | (TokenIdent ident, position) ->
     let _ : token_pos = pop tokens in
-    Ok (ExprVar x, position)
-  | (TokenStr x, position) ->
+    Ok (ExprVar ident, position)
+  | (TokenStr str, position) ->
     let _ : token_pos = pop tokens in
-    Ok (ExprStr x, position)
+    Ok (ExprStr str, position)
   | (TokenLParen, _) -> Ok (parse_call tokens)
   | (TokenSwitch, _) -> Ok (parse_switch tokens)
   | (TokenSlash, _) -> Ok (parse_func tokens)
@@ -636,7 +636,7 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
     | token -> exit_unexpected_token token in
   let var : string =
     match pop tokens with
-    | (TokenIdent x, _) -> x
+    | (TokenIdent ident, _) -> ident
     | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
@@ -664,7 +664,7 @@ and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
     | token -> exit_unexpected_token token in
   let var : string =
     match pop tokens with
-    | (TokenIdent x, _) -> x
+    | (TokenIdent ident, _) -> ident
     | token -> exit_unexpected_token token in
   let expr : expr_pos =
     match parse_expr tokens with
@@ -713,7 +713,7 @@ and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
 let parse_top_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =
     match pop tokens with
-    | (TokenIdent x, position) -> (x, position)
+    | (TokenIdent ident, position) -> (ident, position)
     | token -> exit_unexpected_token token in
   let args : string_type_pos list = parse_args [] tokens in
   let body : stmt_pos list =
@@ -729,7 +729,7 @@ let parse (tokens : token_pos Queue.t) : func Queue.t =
   let funcs : func Queue.t = Queue.create () in
   while (Queue.length tokens) <> 0 do
     match peek tokens with
-    | (TokenIdent x, _) when is_lower x.[0] ->
+    | (TokenIdent ident, _) when is_lower ident.[0] ->
       Queue.add (parse_top_func tokens) funcs
     | token -> exit_unexpected_token token
   done;
