@@ -72,6 +72,7 @@ let rec match_or_exit
     (given : Parse.type_pos) : unit =
   match (expected, deref given) with
   | (_, (_, None)) -> assert false
+  | (expected, (given, position)) when expected = given -> ()
   | (TypeGeneric var, given) ->
     (match Hashtbl.find_opt context.bindings var with
      | Some (existing, _) -> match_or_exit existing given
@@ -98,7 +99,6 @@ let rec match_or_exit
         (List.combine args0 args1);
       match_or_exit ret0 (ret1, Some position)
     )
-  | (expected, (given, position)) when expected = given -> ()
   | (TypeHeap items0, (TypeHeap items1, Some position)) ->
     (
       let items0_len : int = List.length items0 in
