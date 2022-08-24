@@ -10,6 +10,12 @@ f2 f x {
     (f x)
 }
 
+f3 x {
+    let y (alloc 1);
+    seta y 0 x;
+    y
+}
+
 entry {
     (printf
         "%ld\n%s\n%ld\n%s\n"
@@ -17,5 +23,6 @@ entry {
         (f0 "a")
         (f1 1)
         (f2 f0 "b"));
+    (printf "%ld\n%s\n" (deref (f3 2) 0) (deref (f3 "c") 0));
     0
 }

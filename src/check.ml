@@ -145,12 +145,16 @@ let rec swap
   | TypeHeap items -> TypeHeap (List.map (swap target replacement) items)
   | _ -> existing
 
-let rec get_generic : Parse.type' -> Parse.type' =
+let rec get_generic (vars : string list option) : Parse.type' -> Parse.type' =
   function
-  | TypeVar var -> TypeGeneric var
+  | TypeVar var as type'->
+    (match vars with
+     | None -> TypeGeneric var
+     | Some vars when List.mem var vars -> TypeGeneric var
+     | _ -> type')
   | TypeFunc (args, return) ->
-    TypeFunc (List.map get_generic args, get_generic return)
-  | TypeHeap items -> TypeHeap (List.map get_generic items)
+    TypeFunc (List.map (get_generic vars) args, get_generic vars return)
+  | TypeHeap items -> TypeHeap (List.map (get_generic vars) items)
   | type' -> type'
 
 let resolve () : unit =
@@ -462,15 +466,17 @@ and walk_func (func : Parse.func) : unit =
   destroy_scope ();
   (match Hashtbl.find context.bindings context.func_label with
    | (TypeFunc (args, return), position) ->
-     let vars : string list = List.concat_map (find_vars []) args in
-     let return : Parse.type' =
-       match return with
-       | TypeVar var when List.mem var vars -> get_generic return
-       | _ -> return in
      Hashtbl.replace
        context.bindings
        context.func_label
-       (TypeFunc (List.map get_generic args, return), position)
+       (
+         TypeFunc
+           (
+             List.map (get_generic None) args,
+             get_generic (Some (List.concat_map (find_vars []) args)) return
+           ),
+         position
+       )
    | _ -> assert false)
 
 let set_intrinsic (label : string) (type' : Parse.type') : unit =
