@@ -396,7 +396,20 @@ and walk_stmt : Parse.stmt_pos -> Parse.type_pos option =
             position
             (Printf.sprintf "`%s` shadows existing variable binding" var))
      | None -> assert false)
-  | (StmtSetLocal _, _) -> assert false
+  | ((StmtSetLocal (var, expr)), position) ->
+    (match Hashtbl.find_opt context.bindings var with
+     | None ->
+       Io.exit_at
+         position
+         (Printf.sprintf "variable `%s` not yet defined" var)
+     | Some (var_type, _) ->
+       (match walk_expr expr with
+        | Some expr_type ->
+          (
+            match_or_exit var_type expr_type;
+            None
+          )
+        | None -> assert false))
   | (StmtSetHeap (var, n, value), position) ->
     (match walk_expr var with
      | Some type' ->
