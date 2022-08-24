@@ -3,7 +3,7 @@ fib n {
     let scope (alloc 2);
     seta scope 0 0;
     seta scope 1 1;
-    let loop \scope n {
+    let loop \scope @ (Int Int) n {
         switch (= n 0) {
             let a (deref scope 0);
             let b (deref scope 1);

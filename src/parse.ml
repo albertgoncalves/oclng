@@ -24,6 +24,7 @@ and type' =
   | TypeFunc of ((type' list) * type')
   | TypeHeap of type' list
   | TypeGeneric of string
+  | TypeStruct of string
 
 and func =
   {
@@ -41,6 +42,8 @@ and string_pos = (string * Io.position)
 and string_type_pos = (string * (type' option) * Io.position)
 
 type type_pos = (type' * (Io.position option))
+
+type structs = (string, type_pos) Hashtbl.t
 
 let encode (chars : char list) : string =
   let rec f (prev : char list) : char list -> char list =
@@ -164,6 +167,9 @@ type token =
   | TokenIdent of string
   | TokenStr of string
 
+  | TokenTypeInt
+  | TokenTypeStr
+
 type token_pos = token * Io.position
 
 let show_token : token -> string =
@@ -189,6 +195,9 @@ let show_token : token -> string =
   | TokenInt x -> string_of_int x
   | TokenIdent ident -> ident
   | TokenStr str -> Printf.sprintf "\"%s\"" str
+
+  | TokenTypeInt -> "Int"
+  | TokenTypeStr -> "Str"
 
 type context =
   {
@@ -235,6 +244,9 @@ let is_digit (c : char) : bool =
 let is_lower (c : char) : bool =
   ('a' <= c) && (c <= 'z')
 
+let is_upper (c : char) : bool =
+  ('A' <= c) && (c <= 'Z')
+
 let is_space : char -> bool =
   function
   | '\n' | '\t' | ' ' -> true
@@ -261,6 +273,9 @@ let into_token : (string * Io.position) -> token_pos =
 
   | ("entry", position) -> (TokenIdent "entry_", position)
   | ("loop", position) -> (TokenIdent "loop_", position)
+
+  | ("Int", position) -> (TokenTypeInt, position)
+  | ("Str", position) -> (TokenTypeStr, position)
 
   | (ident, position) ->
     (
@@ -401,6 +416,56 @@ let rec return_last (prev : stmt_pos list) : stmt_pos list -> stmt_pos list =
     return_last ((StmtReturn expr, position) :: prev) []
   | stmt :: stmts -> return_last (stmt :: prev) stmts
 
+let exit_unexpected_token ((token, position) : token_pos) : 'a =
+  Io.exit_at
+    position
+    (Printf.sprintf "unexpected token `%s`" (show_token token))
+
+let rec parse_type (tokens : token_pos Queue.t) : type_pos option =
+  match peek tokens with
+  | (TokenTypeInt, position) ->
+    let _ : token_pos = pop tokens in
+    Some (TypeInt, Some position)
+  | (TokenTypeStr, position) ->
+    let _ : token_pos = pop tokens in
+    Some (TypeStr, Some position)
+  | (TokenLParen, position) ->
+    let _ : token_pos = pop tokens in
+    let items : type' list = List.map fst (parse_types [] tokens) in
+    (match pop tokens with
+     | (TokenRParen, _) -> Some (TypeHeap items, Some position)
+     | token -> exit_unexpected_token token);
+  | (TokenSlash, position) ->
+    let _ : token_pos = pop tokens in
+    let args : type' list = List.map fst (parse_types [] tokens) in
+    (match pop tokens with
+     | (TokenLBrace, _)  -> ()
+     | token -> exit_unexpected_token token);
+    let return : type' =
+      match parse_type tokens with
+      | Some (type', _) -> type'
+      | None -> Io.exit_at position "expected return type" in
+    (match pop tokens with
+     | (TokenRBrace, _)  -> ()
+     | token -> exit_unexpected_token token);
+    Some (TypeFunc (args, return), Some position)
+  | (TokenIdent ident, position) as token ->
+    (
+      if not (is_upper ident.[0]) then (
+        exit_unexpected_token token
+      );
+      let _ : token_pos = pop tokens in
+      Some (TypeStruct ident, Some position)
+    )
+  | _ -> None
+
+and parse_types
+    (prev : type_pos list)
+    (tokens : token_pos Queue.t) : type_pos list =
+  match parse_type tokens with
+  | None -> List.rev prev
+  | Some type' -> parse_types (type' :: prev) tokens
+
 let rec parse_args
     (prev : string_type_pos list)
     (tokens : token_pos Queue.t) : string_type_pos list =
@@ -411,18 +476,13 @@ let rec parse_args
      | (TokenAt, _) ->
        (
          let _ : token_pos = pop tokens in
-         match pop tokens with
-         | (TokenUnderS, _) ->
-           parse_args ((arg, None, position) :: prev) tokens
-         | _ -> assert false
+         match parse_type tokens with
+         | None -> assert false
+         | Some (type', _) ->
+           parse_args ((arg, Some type', position) :: prev) tokens
        )
      | _ -> parse_args ((arg, None, position) :: prev) tokens)
   | _ -> List.rev prev
-
-let exit_unexpected_token ((token, position) : token_pos) : 'a =
-  Io.exit_at
-    position
-    (Printf.sprintf "unexpected token `%s`" (show_token token))
 
 let parse_block
     (tokens : token_pos Queue.t)
@@ -743,12 +803,24 @@ let parse_top_func (tokens : token_pos Queue.t) : func =
   Printf.fprintf stderr "%s\n" (show_func func);
   func
 
-let parse (tokens : token_pos Queue.t) : func Queue.t =
+let parse (tokens : token_pos Queue.t) : (func Queue.t * structs) =
   let funcs : func Queue.t = Queue.create () in
+  let structs : structs = Hashtbl.create 16 in
   while (Queue.length tokens) <> 0 do
     match peek tokens with
     | (TokenIdent ident, _) when is_lower ident.[0] ->
       Queue.add (parse_top_func tokens) funcs
+    | (TokenIdent ident, position) ->
+      (match Hashtbl.find_opt structs ident with
+       | None ->
+         let _ : token_pos = pop tokens in
+         (match parse_type tokens with
+          | Some type' -> Hashtbl.add structs ident type'
+          | None -> assert false)
+       | Some _ ->
+         Io.exit_at
+           position
+           (Printf.sprintf "struct `%s` already defined" ident))
     | token -> exit_unexpected_token token
   done;
-  funcs
+  (funcs, structs)

@@ -31,7 +31,8 @@ syn keyword Function
     \ unmask
     \ print_stack
 syn keyword Type
-    \ _
+    \ Int
+    \ Str
 
 syn match Function "child+"
 syn match Function "child-"

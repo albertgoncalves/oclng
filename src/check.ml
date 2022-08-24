@@ -32,6 +32,8 @@ let get_var () : Parse.type' =
 
 let rec deref : Parse.type_pos -> Parse.type_pos =
   function
+  | (TypeStruct struct', position) ->
+    (fst (Hashtbl.find context.bindings struct'), position)
   | (TypeVar var, position) as type' ->
     (match Hashtbl.find_opt context.bindings var with
      | Some type' -> deref type'
@@ -91,15 +93,34 @@ let rec match_or_exit
              args0_len
              args1_len)
       );
-      List.combine args0 args1
-      |> List.iter (fun (a0, a1) -> match_or_exit a0 (a1, Some position));
+      List.iter
+        (fun (a0, a1) -> match_or_exit a0 (a1, Some position))
+        (List.combine args0 args1);
       match_or_exit ret0 (ret1, Some position)
     )
   | (expected, (given, position)) when expected = given -> ()
+  | (TypeHeap items0, (TypeHeap items1, Some position)) ->
+    (
+      let items0_len : int = List.length items0 in
+      let items1_len : int = List.length items1 in
+      if items0_len <> items1_len then (
+        Io.exit_at
+          position
+          (Printf.sprintf
+             "expected %d arguments, given %d"
+             items0_len
+             items1_len)
+      );
+      List.iter
+        (fun (i0, i1) -> match_or_exit i0 (i1, Some position))
+        (List.combine items0 items1)
+    )
   | (TypeVar var, given) ->
     (match Hashtbl.find_opt context.bindings var with
      | Some (existing, _) -> match_or_exit existing given
      | None -> Hashtbl.add context.bindings var given)
+  | (TypeStruct struct', given) ->
+    match_or_exit (fst (Hashtbl.find context.bindings struct')) given
   | (expected, (TypeVar var, position)) ->
     (match Hashtbl.find_opt context.bindings var with
      | Some existing -> match_or_exit expected existing
@@ -143,10 +164,10 @@ let resolve () : unit =
         Hashtbl.to_seq context.bindings
         |> List.of_seq
         |> List.iter
-          (fun (key, (current, position)) ->
+          (fun (binding, (current, position)) ->
              Hashtbl.replace
                context.bindings
-               key
+               binding
                (swap label type' current, position))
       )
     | None -> Queue.add label remaining
@@ -490,7 +511,12 @@ let prepare (func : Parse.func) : unit =
        position
        (Printf.sprintf "function `%s` is already defined" label));
   let args : (string * Parse.type') list =
-    List.map (fun (arg, _, position) -> (arg, get_var ())) func.args in
+    List.map
+      (fun (arg, type', position) ->
+         match type' with
+         | None -> (arg, get_var ())
+         | Some type' -> (arg, type'))
+      func.args in
   assert (not (Hashtbl.mem context.funcs label));
   Hashtbl.add context.funcs label (List.map fst args);
   assert (not (Hashtbl.mem context.bindings label));
@@ -569,7 +595,12 @@ let reorder (funcs : Parse.func Queue.t) : unit =
     (fun label -> Queue.add (Hashtbl.find mapping label) funcs)
     ordering
 
-let check (funcs : Parse.func Queue.t) : unit =
+let check (funcs : Parse.func Queue.t) (structs : Parse.structs) : unit =
+  Hashtbl.to_seq structs
+  |> Seq.iter
+    (fun (struct', type') ->
+       assert (not (Hashtbl.mem context.bindings struct'));
+       Hashtbl.add context.bindings struct' type');
   set_intrinsic "printf" TypeAny;
   set_intrinsic "print_stack" (TypeFunc ([], TypeAny));
   set_intrinsic "free" (TypeFunc ([], TypeAny));
