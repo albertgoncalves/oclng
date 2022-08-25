@@ -537,8 +537,8 @@ and resolve_stmts
   | (StmtLet (var, ((ExprFunc func, _) as expr)), position) :: rest ->
     (
       Hashtbl.add mapping var (fst func.label);
-      let rest : stmt_pos list = resolve_stmts mapping rest in
-      (StmtDrop (resolve_expr mapping expr), position) :: rest
+      (StmtDrop (resolve_expr mapping expr), position) ::
+      (resolve_stmts mapping rest)
     )
   | (StmtLet (var, expr), position) :: rest ->
     (StmtLet (var, resolve_expr mapping expr), position) ::
