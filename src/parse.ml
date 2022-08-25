@@ -449,7 +449,7 @@ let rec parse_type (tokens : token_pos Queue.t) : type_pos option =
      | (TokenRBrace, _)  -> ()
      | token -> exit_unexpected_token token);
     Some (TypeFunc (args, return), Some position)
-  | (TokenIdent ident, position) as token ->
+  | (TokenIdent ident, position) as token when is_upper ident.[0] ->
     (
       if not (is_upper ident.[0]) then (
         exit_unexpected_token token
