@@ -85,7 +85,7 @@ let rec show_expr : expr -> string =
         branches
         |> List.map
           (fun s ->
-             String.concat " " (s |> List.map fst |> List.map show_stmt))
+             String.concat "; " (s |> List.map fst |> List.map show_stmt))
         |> String.concat " } { "
       )
 
@@ -117,7 +117,7 @@ let show_func (func : func) : string =
   let (label, _) : string * Io.position = func.label in
   let body : string =
     String.concat
-      "\n    "
+      ";\n    "
       (List.map (fun s -> s |> fst |> show_stmt) func.body) in
   if (List.length func.args) = 0 then
     Printf.sprintf "%s {\n    %s\n}\n" label body
