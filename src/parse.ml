@@ -79,7 +79,7 @@ let rec show_expr : expr -> string =
     Printf.sprintf "(%s %s)" (show_expr_pos expr) (show_exprs args)
   | ExprSwitch (expr, branches) ->
     Printf.sprintf
-      "branch %s { %s }"
+      "switch %s { %s }"
       (show_expr_pos expr)
       (
         branches
