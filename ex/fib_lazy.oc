@@ -1,25 +1,32 @@
+List
+    | ?a \?b { List } ?b
+    | ?a List
+
 list h f x {
     (free);
-    let l (alloc 4);
-    (child+ l 3);
-    seta l 0 0;
-    seta l 1 h;
-    seta l 2 f;
-    seta l 3 x;
+    new l List 0 h f x;
+    # let l (alloc 4);
+    # (child+ l 3);
+    # seta l 0 0;
+    # seta l 1 h;
+    # seta l 2 f;
+    # seta l 3 x;
     l
 }
 
-head l {
+head l @ List {
     (deref l 1)
 }
 
-tail l {
-    switch (deref l 0) {
+tail l @ List {
+    switch (tag l) {
+    # switch (deref l 0) {
         let x ((deref l 2) (deref l 3));
-        seta l 0 1;
-        seta l 2 x;
-        (child- l 3);
-        (child+ l 2);
+        into l 0 1 (deref l 1) x;
+        # seta l 0 1;
+        # seta l 2 x;
+        # (child- l 3);
+        # (child+ l 2);
         x
     } {
         (deref l 2)
