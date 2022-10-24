@@ -41,7 +41,7 @@ and string_pos = (string * Io.position)
 
 and string_type_pos = (string * (type' option) * Io.position)
 
-type type_pos = (type' * (Io.position option))
+and type_pos = (type' * (Io.position option))
 
 type structs = (string, type_pos) Hashtbl.t
 
