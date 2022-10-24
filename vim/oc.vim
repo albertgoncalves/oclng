@@ -20,6 +20,8 @@ syn keyword Statement
     \ let
     \ set
     \ seta
+    \ new
+    \ into
     \ switch
 syn keyword Function
     \ entry

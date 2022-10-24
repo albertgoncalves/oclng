@@ -623,6 +623,8 @@ and compile_stmt : Parse.stmt_pos -> unit =
       compile_expr expr;
       compile_return ()
     )
+  | (StmtNew _, _)
+  | (StmtInto _, _) -> assert false
 
 and compile_stmts : Parse.stmt_pos list -> bool =
   function

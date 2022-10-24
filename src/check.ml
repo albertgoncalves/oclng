@@ -442,6 +442,8 @@ and walk_stmt : Parse.stmt_pos -> Parse.type_pos option =
                "unable to write to unknown allocation `%s`"
                (Parse.show_expr (fst var))))
      | None -> assert false)
+  | (StmtNew _, _)
+  | (StmtInto _, _) -> assert false
 
 and walk_func (func : Parse.func) : unit =
   create_scope ();
@@ -517,7 +519,9 @@ let collect (funcs : Parse.func Queue.t) : unit =
       (
         walk_expr var;
         walk_expr value
-      ) in
+      )
+    | Parse.StmtNew _
+    | Parse.StmtInto _ -> assert false in
   Queue.iter (fun (func : Parse.func) -> List.iter walk_stmt func.body) funcs;
   Queue.transfer locals funcs
 
@@ -583,7 +587,9 @@ let reorder (funcs : Parse.func Queue.t) : unit =
       (
         walk_expr parent var;
         walk_expr parent value
-      ) in
+      )
+    | Parse.StmtNew _
+    | Parse.StmtInto _ -> assert false in
   Queue.iter
     (fun (func : Parse.func) ->
        List.iter (walk_stmt (fst func.label)) func.body)

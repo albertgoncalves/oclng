@@ -5,6 +5,8 @@ type stmt =
   | StmtLet of (string * expr_pos)
   | StmtSetLocal of (string * expr_pos)
   | StmtSetHeap of (expr_pos * int * expr_pos)
+  | StmtNew of (string * string * int * expr_pos list)
+  | StmtInto of (expr_pos * int * int * expr_pos list)
 
 and expr =
   | ExprInt of int
@@ -112,6 +114,15 @@ and show_stmt : stmt -> string =
       (show_expr_pos var)
       offset
       (show_expr_pos value)
+  | StmtNew (var, struct', index, exprs) ->
+    Printf.sprintf "new %s %s %d %s" var struct' index (show_exprs exprs)
+  | StmtInto (expr, from, to', exprs) ->
+    Printf.sprintf
+      "into %s %d %d %s"
+      (show_expr (fst expr))
+      from
+      to'
+      (show_exprs exprs)
 
 let show_func (func : func) : string =
   let (label, _) : string * Io.position = func.label in
@@ -163,6 +174,9 @@ type token =
   | TokenSetA
   | TokenSwitch
 
+  | TokenNew
+  | TokenInto
+
   | TokenInt of int
   | TokenIdent of string
   | TokenStr of string
@@ -191,6 +205,9 @@ let show_token : token -> string =
   | TokenSet -> "set"
   | TokenSetA -> "seta"
   | TokenSwitch -> "switch"
+
+  | TokenNew -> "new"
+  | TokenInto -> "into"
 
   | TokenInt x -> string_of_int x
   | TokenIdent ident -> ident
@@ -270,6 +287,9 @@ let into_token : (string * Io.position) -> token_pos =
   | ("set", position) -> (TokenSet, position)
   | ("seta", position) -> (TokenSetA, position)
   | ("switch", position) -> (TokenSwitch, position)
+
+  | ("new", position) -> (TokenNew, position)
+  | ("into", position) -> (TokenInto, position)
 
   | ("entry", position) -> (TokenIdent "entry_", position)
   | ("loop", position) -> (TokenIdent "loop_", position)
@@ -561,6 +581,24 @@ and resolve_stmts
   | (StmtReturn expr, position) :: rest ->
     (StmtReturn (resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
+  | (StmtNew (var, struct', index, exprs), position) :: rest ->
+    (
+      StmtNew (var, struct', index, List.map (resolve_expr mapping) exprs),
+      position
+    ) :: (resolve_stmts mapping rest)
+  | (StmtInto (expr, from, to', exprs), position) :: rest ->
+    (
+      (
+        StmtInto
+          (
+            resolve_expr mapping expr,
+            from,
+            to',
+            List.map (resolve_expr mapping) exprs
+          ),
+        position
+      )
+    ) :: (resolve_stmts mapping rest)
 
 let rec parse_expr
     (tokens : token_pos Queue.t) : (expr_pos, Io.position) result =
@@ -680,6 +718,8 @@ and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   | (TokenLet, _) -> Ok (parse_let tokens)
   | (TokenSet, _) -> Ok (parse_set_local tokens)
   | (TokenSetA, _) -> Ok (parse_set_heap tokens)
+  | (TokenNew, _) -> Ok (parse_new tokens)
+  | (TokenInto, _) -> Ok (parse_into tokens)
   | (_, position) ->
     match parse_expr tokens with
     | Ok expr -> Ok (StmtDrop expr, position)
@@ -787,6 +827,47 @@ and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
         position
         "failed to parse expression while parsing `seta` statement" in
   (StmtSetHeap (var, offset, value), position)
+
+and parse_new (tokens : token_pos Queue.t) : stmt_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenNew, position) -> position
+    | _ -> assert false in
+  let var : string =
+    match pop tokens with
+    | (TokenIdent var, _) -> var
+    | token -> exit_unexpected_token token in
+  let struct' : string =
+    match pop tokens with
+    | (TokenIdent struct', _) -> struct'
+    | token -> exit_unexpected_token token in
+  let index : int =
+    match pop tokens with
+    | (TokenInt index, _) -> index
+    | token -> exit_unexpected_token token in
+  (StmtNew (var, struct', index, parse_exprs [] tokens), position)
+
+and parse_into (tokens : token_pos Queue.t) : stmt_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenInto, position) -> position
+    | _ -> assert false in
+  let expr : expr_pos =
+    match parse_expr tokens with
+    | Ok value -> value
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `into` statement" in
+  let from : int =
+    match pop tokens with
+    | (TokenInt from, _) -> from
+    | token -> exit_unexpected_token token in
+  let to': int =
+    match pop tokens with
+    | (TokenInt to', _) -> to'
+    | token -> exit_unexpected_token token in
+  (StmtInto (expr, from, to', parse_exprs [] tokens), position)
 
 let parse_top_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =
