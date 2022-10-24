@@ -27,6 +27,7 @@ and type' =
   | TypeHeap of type' list
   | TypeGeneric of string
   | TypeStruct of string
+  | TypeHeaps of type_pos list list
 
 and func =
   {
@@ -151,6 +152,10 @@ let rec show_type : type' -> string =
   | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
   | TypeGeneric var -> Printf.sprintf "'%s" var
   | TypeStruct struct' -> struct'
+  | TypeHeaps heaps ->
+    String.concat
+      " | "
+      (List.map (fun items -> show_types (List.map fst items)) heaps)
 
 and show_types (types : type' list) : string =
   String.concat " " (List.map show_type types)
@@ -165,6 +170,8 @@ type token =
   | TokenSemiC
   | TokenSlash
 
+  | TokenPipe
+  | TokenQuestion
   | TokenAt
   | TokenUnderS
 
@@ -197,6 +204,8 @@ let show_token : token -> string =
   | TokenSemiC -> ";"
   | TokenSlash -> "\\"
 
+  | TokenPipe -> "|"
+  | TokenQuestion -> "?"
   | TokenAt -> "@"
   | TokenUnderS -> "_"
 
@@ -279,6 +288,8 @@ let into_token : (string * Io.position) -> token_pos =
   | ("]", position) -> (TokenRBracket, position)
   | (";", position) -> (TokenSemiC, position)
   | ("\\", position) -> (TokenSlash, position)
+  | ("|", position) -> (TokenPipe, position)
+  | ("?", position) -> (TokenQuestion, position)
   | ("@", position) -> (TokenAt, position)
   | ("_", position) -> (TokenUnderS, position)
 
@@ -381,7 +392,7 @@ let tokenize () : token_pos Queue.t =
           let r : int = r + 1 in
           loop_token r r
         )
-      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' | '@' ->
+      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' | '@' | '|' | '?' ->
         (
           if l <> r then (
             Queue.add
@@ -477,7 +488,28 @@ let rec parse_type (tokens : token_pos Queue.t) : type_pos option =
       let _ : token_pos = pop tokens in
       Some (TypeStruct ident, Some position)
     )
+  | (TokenQuestion, position) ->
+    let _ : token_pos = pop tokens in
+    (match pop tokens with
+     | (TokenIdent ident, _) -> Some (TypeGeneric ident, Some position)
+     | token -> exit_unexpected_token token)
   | _ -> None
+
+and parse_type_heaps
+    (position : Io.position)
+    (prev : type_pos list list)
+    (tokens : token_pos Queue.t) : type_pos =
+  match peek tokens with
+  | (TokenPipe, _) ->
+    let _ : token_pos = pop tokens in
+    parse_type_heaps position ((parse_types [] tokens) :: prev) tokens
+  | _ ->
+    let n : int = List.length prev in
+    (
+      TypeHeaps
+        (List.map (List.cons ((TypeRange (0, n - 1)), None)) (List.rev prev)),
+      Some position
+    )
 
 and parse_types
     (prev : type_pos list)
@@ -895,9 +927,13 @@ let parse (tokens : token_pos Queue.t) : (func Queue.t * structs) =
       (match Hashtbl.find_opt structs ident with
        | None ->
          let _ : token_pos = pop tokens in
-         (match parse_type tokens with
-          | Some type' -> Hashtbl.add structs ident type'
-          | None -> assert false)
+         (match peek tokens with
+          | (TokenPipe, position) ->
+            Hashtbl.add structs ident (parse_type_heaps position [] tokens)
+          | _ ->
+            (match parse_type tokens with
+             | Some type' -> Hashtbl.add structs ident type'
+             | None -> assert false))
        | Some _ ->
          Io.exit_at
            position
