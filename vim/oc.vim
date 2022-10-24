@@ -29,6 +29,7 @@ syn keyword Function
     \ alloc
     \ free
     \ deref
+    \ tag
     \ mask
     \ unmask
     \ print_stack
