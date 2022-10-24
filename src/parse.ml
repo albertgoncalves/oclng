@@ -711,7 +711,7 @@ and parse_let (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenLet, position) -> position
-    | token -> exit_unexpected_token token in
+    | _ -> assert false in
   let var : string =
     match pop tokens with
     | (TokenIdent ident, _) -> ident
@@ -739,7 +739,7 @@ and parse_set_local (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSet, position) -> position
-    | token -> exit_unexpected_token token in
+    | _ -> assert false in
   let var : string =
     match pop tokens with
     | (TokenIdent ident, _) -> ident
@@ -767,7 +767,7 @@ and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
   let position : Io.position =
     match pop tokens with
     | (TokenSetA, position) -> position
-    | token -> exit_unexpected_token token in
+    | _ -> assert false in
   let var : expr_pos =
     match parse_expr tokens with
     | Ok var -> var
