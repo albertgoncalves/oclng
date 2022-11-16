@@ -24,8 +24,8 @@ flags_c=(
     -Wno-c11-extensions
     -Wno-declaration-after-statement
     -Wno-disabled-macro-expansion
-    -Wno-extra-semi-stmt
     -Wno-incompatible-library-redeclaration
+    -Wno-padded
 )
 flags_fasm=(
     -d "HEAP_CAP=${heap_cap}"

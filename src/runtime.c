@@ -21,7 +21,7 @@ STATIC_ASSERT(sizeof(Bool) == sizeof(u8));
 #define ERROR 1
 
 #define EXIT_IF(condition)             \
-    {                                  \
+    do {                               \
         if (condition) {               \
             fflush(stdout);            \
             fprintf(stderr,            \
@@ -32,7 +32,7 @@ STATIC_ASSERT(sizeof(Bool) == sizeof(u8));
                     #condition);       \
             _exit(ERROR);              \
         }                              \
-    }
+    } while (FALSE)
 
 typedef struct {
     u32  children;
