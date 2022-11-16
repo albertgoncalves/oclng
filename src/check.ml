@@ -72,7 +72,7 @@ let rec match_or_exit
     (given : Parse.type_pos) : unit =
   match (expected, deref given) with
   | (_, (_, None)) -> assert false
-  | (expected, (given, position)) when expected = given -> ()
+  | (expected, (given, _)) when expected = given -> ()
   | (TypeGeneric var, given) ->
     (match Hashtbl.find_opt context.bindings var with
      | Some (existing, _) -> match_or_exit existing given
