@@ -41,29 +41,33 @@ drop n l {
     }
 }
 
-zip_sum l0 l1 {
-    (free);
-    let pair (alloc 2);
-    (child+ pair 0);
-    (child+ pair 1);
-    seta pair 0 l0;
-    seta pair 1 l1;
-    (list
-        (+ (head l0) (head l1))
-        \pair {
-            (zip_sum (tail (deref pair 0)) (tail (deref pair 1)))
-        }
-        pair)
+f l {
+    (zip_sum l (tail l))
 }
 
 entry {
     (\ {
-        let fibs (list 0 \l { (list 1 \l { (zip_sum l (tail l)) } l) } 0);
-        seta fibs 3 fibs;
+        let fibs (list 0 \l { (list 1 f l) } fibs);
+        # seta fibs 3 fibs;
         (printf "%ld\n" (head (drop 49 fibs)));
         (print_stack);
         0
     });
     (free);
     0
+}
+
+zip_sum l0 @ List l1 @ List {
+    (free);
+    let pair (alloc 2);
+    seta pair 0 l0;
+    seta pair 1 l1;
+    (child+ pair 0);
+    (child+ pair 1);
+    (list
+        (+ (head l0) (head l1))
+        \pair @ (List List) {
+            (zip_sum (tail (deref pair 0)) (tail (deref pair 1)))
+        }
+        pair)
 }
