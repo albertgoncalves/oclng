@@ -6,6 +6,7 @@ type context =
     vars : string Queue.t;
     scopes : string Stack.t Stack.t;
     generics : string Stack.t;
+    anchors : (string, (Parse.type_pos list list * int)) Hashtbl.t;
     mutable func_label : string;
   }
 
@@ -17,6 +18,7 @@ let context : context =
     vars = Queue.create ();
     scopes = Stack.create ();
     generics = Stack.create ();
+    anchors = Hashtbl.create 8;
     func_label = "";
   }
 
@@ -81,7 +83,6 @@ let rec match_or_exit
          Stack.push var context.generics;
          Hashtbl.add context.bindings var given
        ))
-  | (_, (TypeGeneric _, _)) -> assert false
   | (TypeFunc (args0, ret0), (TypeFunc (args1, ret1), Some position)) ->
     (
       let args0_len : int = List.length args0 in
@@ -125,6 +126,7 @@ let rec match_or_exit
     (match Hashtbl.find_opt context.bindings var with
      | Some existing -> match_or_exit expected existing
      | None -> Hashtbl.add context.bindings var (expected, position))
+  | (_, (TypeGeneric _, _)) -> assert false
   | (_, (given, Some position)) ->
     Io.exit_at
       position
@@ -219,7 +221,8 @@ let rec walk_expr : Parse.expr_pos -> Parse.type_pos option =
        (match List.nth_opt items n with
         | Some type' ->
           (match deref (type', Some position) with
-           | (TypeHeap _, _) -> None
+           | (TypeHeap _, _)
+           | (TypeHeaps _, _) -> None
            | _ -> assert false)
         | None ->
           Io.exit_at
@@ -243,12 +246,39 @@ let rec walk_expr : Parse.expr_pos -> Parse.type_pos option =
                   n
                   (List.length items))
            | Some type' -> Some (type', Some position))
-        | _ ->
+        | ( TypeHeaps heaps, _) ->
+          (
+            let types : Parse.type_pos list =
+              List.filter_map (fun items -> List.nth_opt items n) heaps in
+            if List.length heaps <> List.length types then (
+              Io.exit_at
+                position
+                (Printf.sprintf
+                   "index %d is out-of-bounds for branches of type `%s`"
+                   n
+                   (Parse.show_type (TypeHeaps heaps)))
+            );
+            (match types with
+             | (type', _) :: types ->
+               if List.for_all ((=) type') (List.map fst types) then (
+                 Some (type', Some position)
+               ) else (
+                 Io.exit_at
+                   position
+                   (Printf.sprintf
+                      "not all types match at index %d for type `%s`"
+                      n
+                      (Parse.show_type (TypeHeaps heaps)))
+               )
+             | _ -> assert false)
+          )
+        | (type', _) ->
           Io.exit_at
             position
             (Printf.sprintf
-               "unable to de-reference unknown allocation `%s`"
-               (Parse.show_expr (fst expr))))
+               "unable to de-reference unknown allocation `%s` of type '%s'"
+               (Parse.show_expr (fst expr))
+               (Parse.show_type type')))
      | _ -> assert false)
 
   | (ExprCall (expr, arg_exprs), position) -> walk_call expr arg_exprs position
@@ -288,7 +318,10 @@ and walk_call
         (List.combine arg_types expr_types);
       let return : Parse.type_pos =
         match return with
-        | TypeGeneric var -> Hashtbl.find context.bindings var
+        | TypeGeneric var ->
+          (match Hashtbl.find_opt context.bindings var with
+           | Some type' -> type'
+           | None -> assert false)
         | _ -> (return, Some position) in
       while n < (Stack.length context.generics) do
         Hashtbl.remove context.bindings (Stack.pop context.generics)
@@ -331,31 +364,87 @@ and walk_switch
     (expr : Parse.expr_pos)
     (branches : Parse.stmt_pos list list)
     (position : Io.position) : Parse.type_pos option =
-  let type' : Parse.type_pos =
+  let (type', heaps_var)
+    : (Parse.type_pos * (Parse.type_pos list list * string) option) =
     match expr with
+    (* NOTE: We should probably carve out a unique token for `tag` and restrict
+       how it is parsed. The current implementation cuts a lot of corners. *)
+    | (ExprCall ((ExprVar "tag", _), [(ExprVar var, _) as expr]), _) ->
+      (match walk_expr expr with
+       | Some type' ->
+         (match deref type' with
+          | (TypeHeaps heaps, _) ->
+            (
+              let heaps_len : int = List.length heaps in
+              let branches_len : int = List.length branches in
+              if heaps_len <> branches_len then (
+                Io.exit_at
+                  position
+                  (Printf.sprintf
+                     "expected %d branches based on type `%s`, received %d"
+                     heaps_len
+                     (Parse.show_type (TypeHeaps heaps))
+                     branches_len)
+              );
+              (* NOTE: This *should* be safe to do. *)
+              (
+                (fst (List.hd (List.hd heaps)), Some position),
+                Some (heaps, var)
+              )
+            )
+          | _ -> assert false)
+       | _ -> assert false)
     | (ExprCall ((ExprVar "%", _), [expr; (ExprInt n, _)]), position)
       when 0 < n ->
       (match walk_expr expr with
        | Some type' ->
          (
            match_or_exit TypeInt type';
-           (TypeRange (0, n - 1), Some position)
+           ((TypeRange (0, n - 1), Some position), None)
          )
        | _ -> assert false)
-    | (ExprInt n, position) when 0 <= n -> (TypeRange (0, n), Some position)
+    | (ExprInt n, position) when 0 <= n ->
+      ((TypeRange (0, n), Some position), None)
     | _ ->
       (match walk_expr expr with
-       | Some type' -> type'
+       | Some type' -> (type', None)
        | None -> assert false) in
   match_or_exit (TypeRange (0, List.length branches - 1)) type';
   let branches : Parse.type_pos list =
-    List.concat_map
-      (fun branch ->
+    List.mapi
+      (fun index branch ->
          create_scope ();
+         (* NOTE: This is ugly. *)
+         (match heaps_var with
+          | None -> ()
+          | Some (heaps, var) ->
+            (
+              (* NOTE: This is also ugly. *)
+              if Hashtbl.mem context.anchors var then (
+                assert false
+              );
+              Hashtbl.add context.anchors var (heaps, index);
+              Hashtbl.add
+                context.bindings
+                var
+                (TypeHeap (List.map fst (List.nth heaps index)), None)
+            ));
          let type' : Parse.type_pos list = List.filter_map walk_stmt branch in
+         (match heaps_var with
+          | None -> ()
+          | Some (heaps, var) ->
+            (
+              Hashtbl.remove context.bindings var;
+              Hashtbl.remove context.anchors var;
+              (* NOTE: And this is ugly, too. *)
+              if Hashtbl.mem context.anchors var then (
+                assert false
+              )
+            ));
          destroy_scope ();
          type')
-      branches in
+      branches
+    |> List.concat in
   match branches with
   | (type', _) :: types ->
     if List.for_all ((=) type') (List.map fst types) then
@@ -383,23 +472,35 @@ and walk_stmt : Parse.stmt_pos -> Parse.type_pos option =
        )
      | _ -> assert false)
   | (StmtLet (var, expr), position) ->
-    (match walk_expr expr with
-     | Some (TypeAny, _) -> assert false
-     | Some type' ->
-       (match Hashtbl.find_opt context.bindings var with
-        | None ->
-          (
-            let scope : string Stack.t = Stack.pop context.scopes in
-            Stack.push var scope;
-            Stack.push scope context.scopes;
-            Hashtbl.add context.bindings var type';
-            None
-          )
-        | Some _ ->
-          Io.exit_at
-            position
-            (Printf.sprintf "`%s` shadows existing variable binding" var))
-     | None -> assert false)
+    (
+      Hashtbl.add context.bindings var ((get_var ()), Some position);
+      (match walk_expr expr with
+       | Some (TypeAny, _) -> assert false
+       | Some type' ->
+         (match Hashtbl.find_opt context.bindings var with
+          | Some (TypeVar _, _) ->
+            (
+              Hashtbl.remove context.bindings var;
+              let scope : string Stack.t = Stack.pop context.scopes in
+              Stack.push var scope;
+              Stack.push scope context.scopes;
+              Hashtbl.add context.bindings var type';
+              None
+            )
+          | None ->
+            (
+              let scope : string Stack.t = Stack.pop context.scopes in
+              Stack.push var scope;
+              Stack.push scope context.scopes;
+              Hashtbl.add context.bindings var type';
+              None
+            )
+          | Some _ ->
+            Io.exit_at
+              position
+              (Printf.sprintf "`%s` shadows existing variable binding" var))
+       | None -> assert false)
+    )
   | ((StmtSetLocal (var, expr)), position) ->
     (match Hashtbl.find_opt context.bindings var with
      | None ->
@@ -442,6 +543,69 @@ and walk_stmt : Parse.stmt_pos -> Parse.type_pos option =
                "unable to write to unknown allocation `%s`"
                (Parse.show_expr (fst var))))
      | None -> assert false)
+  | (StmtNew (var, struct', index, arg_exprs), position) ->
+    (
+      let heaps : Parse.type_pos list list =
+        (* NOTE: Can this be de-referenced more directly? *)
+        match deref (TypeStruct struct', Some position) with
+        | (TypeHeaps heaps, _) -> heaps
+        | _ -> assert false in
+      (* NOTE: We should check lengths match here. *)
+      List.filter_map walk_expr arg_exprs
+      |> List.combine (List.tl (List.nth heaps index))
+      |> List.iter
+        (fun ((expected, _), given) -> match_or_exit expected given);
+      let type' : Parse.type_pos = (TypeHeaps heaps, Some position) in
+      (match Hashtbl.find_opt context.bindings var with
+       | None ->
+         (
+           let scope : string Stack.t = Stack.pop context.scopes in
+           Stack.push var scope;
+           Stack.push scope context.scopes;
+           Hashtbl.add context.bindings var type';
+           None
+         )
+       | Some _ ->
+         Io.exit_at
+           position
+           (Printf.sprintf "`%s` shadows existing variable binding" var))
+    )
+  (* NOTE: Maybe `into` should directly parse the `var` string, instead of
+     capturing the first argument as an expression? *)
+  | (StmtInto ((ExprVar var, _) as expr, from, to', arg_exprs), position) ->
+    (
+      let (heaps, index) : (Parse.type_pos list list * int) =
+        Hashtbl.find context.anchors var in
+      if from <> index then (
+        assert false
+      );
+      let heap : Parse.type' list =
+        match walk_expr expr with
+        | Some type' ->
+          (match deref type' with
+           | (TypeHeap heap, _) -> heap
+           | _ -> assert false)
+        | None -> assert false in
+      match_or_exit
+        (TypeHeap heap)
+        (TypeHeap (List.map fst (List.nth heaps from)), Some position);
+      let arg_types : Parse.type_pos list =
+        List.filter_map walk_expr arg_exprs in
+      let arg_exprs_len : int = List.length arg_exprs in
+      if arg_exprs_len <> List.length arg_types then (
+        assert false
+      );
+      if (arg_exprs_len + 1) <> List.length (List.nth heaps to') then (
+        assert false
+      );
+      Hashtbl.replace
+        context.bindings
+        var
+        (TypeHeap (List.map fst (List.nth heaps to')), Some position);
+      Hashtbl.replace context.anchors var (heaps, to');
+      None
+    )
+  | (StmtInto _, _) -> assert false
 
 and walk_func (func : Parse.func) : unit =
   create_scope ();
@@ -517,6 +681,12 @@ let collect (funcs : Parse.func Queue.t) : unit =
       (
         walk_expr var;
         walk_expr value
+      )
+    | Parse.StmtNew (_, _, _, exprs) -> List.iter walk_expr exprs
+    | Parse.StmtInto (expr, _, _, exprs) ->
+      (
+        walk_expr expr;
+        List.iter walk_expr exprs
       ) in
   Queue.iter (fun (func : Parse.func) -> List.iter walk_stmt func.body) funcs;
   Queue.transfer locals funcs
@@ -583,6 +753,12 @@ let reorder (funcs : Parse.func Queue.t) : unit =
       (
         walk_expr parent var;
         walk_expr parent value
+      )
+    | Parse.StmtNew (_, _, _, exprs) -> List.iter (walk_expr parent) exprs
+    | Parse.StmtInto (expr, _, _, exprs) ->
+      (
+        walk_expr parent expr;
+        List.iter (walk_expr parent) exprs
       ) in
   Queue.iter
     (fun (func : Parse.func) ->

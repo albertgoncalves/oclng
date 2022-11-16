@@ -5,6 +5,8 @@ type stmt =
   | StmtLet of (string * expr_pos)
   | StmtSetLocal of (string * expr_pos)
   | StmtSetHeap of (expr_pos * int * expr_pos)
+  | StmtNew of (string * string * int * expr_pos list)
+  | StmtInto of (expr_pos * int * int * expr_pos list)
 
 and expr =
   | ExprInt of int
@@ -25,6 +27,7 @@ and type' =
   | TypeHeap of type' list
   | TypeGeneric of string
   | TypeStruct of string
+  | TypeHeaps of type_pos list list
 
 and func =
   {
@@ -41,7 +44,7 @@ and string_pos = (string * Io.position)
 
 and string_type_pos = (string * (type' option) * Io.position)
 
-type type_pos = (type' * (Io.position option))
+and type_pos = (type' * (Io.position option))
 
 type structs = (string, type_pos) Hashtbl.t
 
@@ -112,6 +115,15 @@ and show_stmt : stmt -> string =
       (show_expr_pos var)
       offset
       (show_expr_pos value)
+  | StmtNew (var, struct', index, exprs) ->
+    Printf.sprintf "new %s %s %d %s" var struct' index (show_exprs exprs)
+  | StmtInto (expr, from, to', exprs) ->
+    Printf.sprintf
+      "into %s %d %d %s"
+      (show_expr (fst expr))
+      from
+      to'
+      (show_exprs exprs)
 
 let show_func (func : func) : string =
   let (label, _) : string * Io.position = func.label in
@@ -140,6 +152,10 @@ let rec show_type : type' -> string =
   | TypeHeap items -> Printf.sprintf "(%s)" (show_types items)
   | TypeGeneric var -> Printf.sprintf "'%s" var
   | TypeStruct struct' -> struct'
+  | TypeHeaps heaps ->
+    String.concat
+      " | "
+      (List.map (fun items -> show_types (List.map fst items)) heaps)
 
 and show_types (types : type' list) : string =
   String.concat " " (List.map show_type types)
@@ -154,6 +170,8 @@ type token =
   | TokenSemiC
   | TokenSlash
 
+  | TokenPipe
+  | TokenQuestion
   | TokenAt
   | TokenUnderS
 
@@ -162,6 +180,9 @@ type token =
   | TokenSet
   | TokenSetA
   | TokenSwitch
+
+  | TokenNew
+  | TokenInto
 
   | TokenInt of int
   | TokenIdent of string
@@ -183,6 +204,8 @@ let show_token : token -> string =
   | TokenSemiC -> ";"
   | TokenSlash -> "\\"
 
+  | TokenPipe -> "|"
+  | TokenQuestion -> "?"
   | TokenAt -> "@"
   | TokenUnderS -> "_"
 
@@ -191,6 +214,9 @@ let show_token : token -> string =
   | TokenSet -> "set"
   | TokenSetA -> "seta"
   | TokenSwitch -> "switch"
+
+  | TokenNew -> "new"
+  | TokenInto -> "into"
 
   | TokenInt x -> string_of_int x
   | TokenIdent ident -> ident
@@ -262,6 +288,8 @@ let into_token : (string * Io.position) -> token_pos =
   | ("]", position) -> (TokenRBracket, position)
   | (";", position) -> (TokenSemiC, position)
   | ("\\", position) -> (TokenSlash, position)
+  | ("|", position) -> (TokenPipe, position)
+  | ("?", position) -> (TokenQuestion, position)
   | ("@", position) -> (TokenAt, position)
   | ("_", position) -> (TokenUnderS, position)
 
@@ -270,6 +298,9 @@ let into_token : (string * Io.position) -> token_pos =
   | ("set", position) -> (TokenSet, position)
   | ("seta", position) -> (TokenSetA, position)
   | ("switch", position) -> (TokenSwitch, position)
+
+  | ("new", position) -> (TokenNew, position)
+  | ("into", position) -> (TokenInto, position)
 
   | ("entry", position) -> (TokenIdent "entry_", position)
   | ("loop", position) -> (TokenIdent "loop_", position)
@@ -361,7 +392,7 @@ let tokenize () : token_pos Queue.t =
           let r : int = r + 1 in
           loop_token r r
         )
-      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' | '@' ->
+      | '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\\' | '@' | '|' | '?' ->
         (
           if l <> r then (
             Queue.add
@@ -457,7 +488,28 @@ let rec parse_type (tokens : token_pos Queue.t) : type_pos option =
       let _ : token_pos = pop tokens in
       Some (TypeStruct ident, Some position)
     )
+  | (TokenQuestion, position) ->
+    let _ : token_pos = pop tokens in
+    (match pop tokens with
+     | (TokenIdent ident, _) -> Some (TypeGeneric ident, Some position)
+     | token -> exit_unexpected_token token)
   | _ -> None
+
+and parse_type_heaps
+    (position : Io.position)
+    (prev : type_pos list list)
+    (tokens : token_pos Queue.t) : type_pos =
+  match peek tokens with
+  | (TokenPipe, _) ->
+    let _ : token_pos = pop tokens in
+    parse_type_heaps position ((parse_types [] tokens) :: prev) tokens
+  | _ ->
+    let n : int = List.length prev in
+    (
+      TypeHeaps
+        (List.map (List.cons ((TypeRange (0, n - 1)), None)) (List.rev prev)),
+      Some position
+    )
 
 and parse_types
     (prev : type_pos list)
@@ -561,6 +613,24 @@ and resolve_stmts
   | (StmtReturn expr, position) :: rest ->
     (StmtReturn (resolve_expr mapping expr), position) ::
     (resolve_stmts mapping rest)
+  | (StmtNew (var, struct', index, exprs), position) :: rest ->
+    (
+      StmtNew (var, struct', index, List.map (resolve_expr mapping) exprs),
+      position
+    ) :: (resolve_stmts mapping rest)
+  | (StmtInto (expr, from, to', exprs), position) :: rest ->
+    (
+      (
+        StmtInto
+          (
+            resolve_expr mapping expr,
+            from,
+            to',
+            List.map (resolve_expr mapping) exprs
+          ),
+        position
+      )
+    ) :: (resolve_stmts mapping rest)
 
 let rec parse_expr
     (tokens : token_pos Queue.t) : (expr_pos, Io.position) result =
@@ -680,6 +750,8 @@ and parse_stmt (tokens : token_pos Queue.t) : (stmt_pos, Io.position) result =
   | (TokenLet, _) -> Ok (parse_let tokens)
   | (TokenSet, _) -> Ok (parse_set_local tokens)
   | (TokenSetA, _) -> Ok (parse_set_heap tokens)
+  | (TokenNew, _) -> Ok (parse_new tokens)
+  | (TokenInto, _) -> Ok (parse_into tokens)
   | (_, position) ->
     match parse_expr tokens with
     | Ok expr -> Ok (StmtDrop expr, position)
@@ -788,6 +860,47 @@ and parse_set_heap (tokens : token_pos Queue.t) : stmt_pos =
         "failed to parse expression while parsing `seta` statement" in
   (StmtSetHeap (var, offset, value), position)
 
+and parse_new (tokens : token_pos Queue.t) : stmt_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenNew, position) -> position
+    | _ -> assert false in
+  let var : string =
+    match pop tokens with
+    | (TokenIdent var, _) -> var
+    | token -> exit_unexpected_token token in
+  let struct' : string =
+    match pop tokens with
+    | (TokenIdent struct', _) -> struct'
+    | token -> exit_unexpected_token token in
+  let index : int =
+    match pop tokens with
+    | (TokenInt index, _) -> index
+    | token -> exit_unexpected_token token in
+  (StmtNew (var, struct', index, parse_exprs [] tokens), position)
+
+and parse_into (tokens : token_pos Queue.t) : stmt_pos =
+  let position : Io.position =
+    match pop tokens with
+    | (TokenInto, position) -> position
+    | _ -> assert false in
+  let expr : expr_pos =
+    match parse_expr tokens with
+    | Ok value -> value
+    | Error position ->
+      Io.exit_at
+        position
+        "failed to parse expression while parsing `into` statement" in
+  let from : int =
+    match pop tokens with
+    | (TokenInt from, _) -> from
+    | token -> exit_unexpected_token token in
+  let to': int =
+    match pop tokens with
+    | (TokenInt to', _) -> to'
+    | token -> exit_unexpected_token token in
+  (StmtInto (expr, from, to', parse_exprs [] tokens), position)
+
 let parse_top_func (tokens : token_pos Queue.t) : func =
   let (label, position) : string_pos =
     match pop tokens with
@@ -814,9 +927,13 @@ let parse (tokens : token_pos Queue.t) : (func Queue.t * structs) =
       (match Hashtbl.find_opt structs ident with
        | None ->
          let _ : token_pos = pop tokens in
-         (match parse_type tokens with
-          | Some type' -> Hashtbl.add structs ident type'
-          | None -> assert false)
+         (match peek tokens with
+          | (TokenPipe, position) ->
+            Hashtbl.add structs ident (parse_type_heaps position [] tokens)
+          | _ ->
+            (match parse_type tokens with
+             | Some type' -> Hashtbl.add structs ident type'
+             | None -> assert false))
        | Some _ ->
          Io.exit_at
            position

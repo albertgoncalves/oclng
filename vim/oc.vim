@@ -6,7 +6,7 @@ if exists("b:current_syntax")
     finish
 endif
 
-syn match Operator  "[(){}\[\];\\@=+\-*/%]"
+syn match Operator  "[(){}\[\];\\@|?=+\-*/%]"
 syn match Number    "\<[0-9]\+\>"
 
 syn match ocSpecial contained "\\\(n\|\"\|\\\)"
@@ -20,6 +20,8 @@ syn keyword Statement
     \ let
     \ set
     \ seta
+    \ new
+    \ into
     \ switch
 syn keyword Function
     \ entry
@@ -27,6 +29,7 @@ syn keyword Function
     \ alloc
     \ free
     \ deref
+    \ tag
     \ mask
     \ unmask
     \ print_stack
